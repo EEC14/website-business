@@ -1,17 +1,26 @@
-import React from 'react';
-import { Stethoscope, User, ShieldAlert, MessageSquare, ClipboardList, GraduationCap, LogOut } from 'lucide-react';
-import { Tab } from '@headlessui/react';
-import { ChatMessage } from './components/ChatMessage';
-import { ChatInput } from './components/ChatInput';
-import { LoadingDots } from './components/LoadingDots';
-import { CarePlanGenerator } from './components/CarePlanGenerator';
-import { MedicalLearning } from './components/MedicalLearning';
-import { AuthPage } from './components/AuthPage';
-import { SubscriptionPage } from './components/SubscriptionPage';
-import { generateResponse } from './services/openai';
-import { useAuth } from './hooks/useAuth';
-import { signOut } from './services/firebase';
-import { clsx } from 'clsx';
+import React from "react";
+import {
+  Stethoscope,
+  User,
+  MessageSquare,
+  ClipboardList,
+  GraduationCap,
+  LogOut,
+} from "lucide-react";
+import { Tab } from "@headlessui/react";
+import { ChatMessage } from "./components/ChatMessage";
+import { ChatInput } from "./components/ChatInput";
+import { LoadingDots } from "./components/LoadingDots";
+import { CarePlanGenerator } from "./components/CarePlanGenerator";
+import { MedicalLearning } from "./components/MedicalLearning";
+import { AuthPage } from "./components/AuthPage";
+import { SubscriptionPage } from "./components/SubscriptionPage";
+import { generateResponse } from "./services/openai";
+import { useAuth } from "./hooks/useAuth";
+import { signOut } from "./services/firebase";
+import { clsx } from "clsx";
+import { hasFeatureAccess } from "./utils/hasFeatureAccess";
+import { AccessDeniedPopup } from "./components/AccessDeniedPopup";
 
 type Message = {
   text: string;
@@ -21,42 +30,43 @@ type Message = {
 };
 
 export default function App() {
-  const { user, loading } = useAuth();
+  const { user, loading, subscription } = useAuth();
+  console.log(subscription);
+
   const [messages, setMessages] = React.useState<Message[]>([]);
   const [isLoading, setIsLoading] = React.useState(false);
-  const [hasSubscription, setHasSubscription] = React.useState(false);
-
-  React.useEffect(() => {
-    // Check if the user came from a successful Stripe payment
-    const urlParams = new URLSearchParams(window.location.search);
-    if (urlParams.get('payment_status') === 'success') {
-      setHasSubscription(true);
-      // Remove the query parameters
-      window.history.replaceState({}, '', window.location.pathname);
-    }
-  }, []);
+  const [showPopup, setShowPopup] = React.useState(false); // Track if the access denied popup should be shown
 
   const handleSendMessage = async (message: string) => {
-    setMessages(prev => [...prev, { 
-      text: message, 
-      isBot: false,
-      isStaff: true
-    }]);
+    setMessages((prev) => [
+      ...prev,
+      {
+        text: message,
+        isBot: false,
+        isStaff: true,
+      },
+    ]);
 
     setIsLoading(true);
     try {
       const response = await generateResponse(message, true);
-      
-      setMessages(prev => [...prev, {
-        text: response.content,
-        isBot: true,
-        isUrgent: response.requiresDoctor
-      }]);
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          text: response.content,
+          isBot: true,
+          isUrgent: response.requiresDoctor,
+        },
+      ]);
     } catch (error) {
-      setMessages(prev => [...prev, {
-        text: "I apologize, but I'm having trouble connecting to my knowledge base. Please try again later.",
-        isBot: true
-      }]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          text: "I apologize, but I'm having trouble connecting to my knowledge base. Please try again later.",
+          isBot: true,
+        },
+      ]);
     } finally {
       setIsLoading(false);
     }
@@ -64,7 +74,7 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex items-center justify-center">
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-b from-blue-50 to-white">
         <LoadingDots />
       </div>
     );
@@ -74,20 +84,64 @@ export default function App() {
     return <AuthPage />;
   }
 
-  if (!hasSubscription) {
-    return <SubscriptionPage />;
+  if (!subscription || subscription.plan === "Free") {
+    return <SubscriptionPage userEmail={user.email!} />;
   }
+
+  console.log(user);
+  console.log(subscription);
+  const handleManageBilling = async () => {
+    try {
+      const response = await fetch("/.netlify/functions/billingportal", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          customerId: subscription.stripeCustomerId,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      console.log(data);
+      window.location.href = data.url;
+    } catch (error) {
+      console.error("There was an error!", error);
+      alert("Failed to redirect to the billing portal.");
+    }
+  };
+
+  // Check feature access for each tab
+  const canAccessChatbot = hasFeatureAccess(
+    subscription.plan,
+    "Chatbot access"
+  );
+  const canAccessCarePlan = hasFeatureAccess(
+    subscription.plan,
+    "Plan generators add-on"
+  );
+  const canAccessLearningHub = hasFeatureAccess(
+    subscription.plan,
+    "Learning hub add-on"
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
       <header className="bg-white shadow-sm">
-        <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="flex items-center justify-between max-w-4xl px-4 py-4 mx-auto">
           <div className="flex items-center gap-2">
             <Stethoscope className="w-6 h-6 text-blue-500" />
             <h1 className="text-xl font-bold text-gray-900">HealthChat</h1>
           </div>
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 text-sm bg-blue-50 px-3 py-1 rounded-full">
+            {subscription && (
+              <button className="" onClick={handleManageBilling}>
+                Mange subscription
+              </button>
+            )}
+            <div className="flex items-center gap-2 px-3 py-1 text-sm rounded-full bg-blue-50">
               <User className="w-4 h-4 text-blue-500" />
               {user.email}
             </div>
@@ -102,18 +156,18 @@ export default function App() {
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto p-4">
-        <div className="bg-white rounded-2xl shadow-lg">
+      <main className="max-w-4xl p-4 mx-auto">
+        <div className="bg-white shadow-lg rounded-2xl">
           <Tab.Group>
-            <Tab.List className="flex space-x-1 rounded-t-2xl bg-blue-50 p-1">
+            <Tab.List className="flex p-1 space-x-1 rounded-t-2xl bg-blue-50">
               <Tab
                 className={({ selected }) =>
                   clsx(
-                    'w-full rounded-lg py-2.5 text-sm font-medium leading-5',
-                    'ring-white ring-opacity-60 ring-offset-2 ring-offset-blue-400 focus:outline-none focus:ring-2',
+                    "w-full rounded-lg py-2.5 text-sm font-medium leading-5",
+                    "ring-white ring-opacity-60 ring-offset-2 ring-offset-blue-400 focus:outline-none focus:ring-2",
                     selected
-                      ? 'bg-white shadow text-blue-700'
-                      : 'text-blue-500 hover:bg-white/[0.12] hover:text-blue-600'
+                      ? "bg-white shadow text-blue-700"
+                      : "text-blue-500 hover:bg-white/[0.12] hover:text-blue-600"
                   )
                 }
               >
@@ -125,11 +179,11 @@ export default function App() {
               <Tab
                 className={({ selected }) =>
                   clsx(
-                    'w-full rounded-lg py-2.5 text-sm font-medium leading-5',
-                    'ring-white ring-opacity-60 ring-offset-2 ring-offset-blue-400 focus:outline-none focus:ring-2',
+                    "w-full rounded-lg py-2.5 text-sm font-medium leading-5",
+                    "ring-white ring-opacity-60 ring-offset-2 ring-offset-blue-400 focus:outline-none focus:ring-2",
                     selected
-                      ? 'bg-white shadow text-blue-700'
-                      : 'text-blue-500 hover:bg-white/[0.12] hover:text-blue-600'
+                      ? "bg-white shadow text-blue-700"
+                      : "text-blue-500 hover:bg-white/[0.12] hover:text-blue-600"
                   )
                 }
               >
@@ -141,11 +195,11 @@ export default function App() {
               <Tab
                 className={({ selected }) =>
                   clsx(
-                    'w-full rounded-lg py-2.5 text-sm font-medium leading-5',
-                    'ring-white ring-opacity-60 ring-offset-2 ring-offset-blue-400 focus:outline-none focus:ring-2',
+                    "w-full rounded-lg py-2.5 text-sm font-medium leading-5",
+                    "ring-white ring-opacity-60 ring-offset-2 ring-offset-blue-400 focus:outline-none focus:ring-2",
                     selected
-                      ? 'bg-white shadow text-blue-700'
-                      : 'text-blue-500 hover:bg-white/[0.12] hover:text-blue-600'
+                      ? "bg-white shadow text-blue-700"
+                      : "text-blue-500 hover:bg-white/[0.12] hover:text-blue-600"
                   )
                 }
               >
@@ -157,48 +211,69 @@ export default function App() {
             </Tab.List>
             <Tab.Panels className="p-4">
               <Tab.Panel>
-                <div className="mb-4 p-4 bg-yellow-50 rounded-lg flex items-start gap-3">
-                  <ShieldAlert className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-1" />
-                  <p className="text-sm text-yellow-700">
-                    This AI chatbot is for informational purposes only. Always use your professional judgment.
-                  </p>
-                </div>
-
-                <div className="space-y-4 mb-4 max-h-[60vh] overflow-y-auto">
-                  {messages.length === 0 ? (
-                    <div className="text-center text-gray-500 py-8">
-                      Start a conversation by typing your medical question below
-                    </div>
-                  ) : (
-                    messages.map((message, index) => (
-                      <ChatMessage
-                        key={index}
-                        message={message.text}
-                        isBot={message.isBot}
-                        isStaff={message.isStaff}
-                        isUrgent={message.isUrgent}
-                      />
-                    ))
-                  )}
-                  {isLoading && (
-                    <div className="p-4 bg-blue-50 rounded-lg">
-                      <LoadingDots />
-                    </div>
-                  )}
-                </div>
-
-                <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+                {canAccessChatbot ? (
+                  <div className="space-y-4 mb-4 max-h-[60vh] overflow-y-auto">
+                    {messages.length === 0 ? (
+                      <div className="py-8 text-center text-gray-500">
+                        Start a conversation by typing your medical question
+                        below
+                      </div>
+                    ) : (
+                      messages.map((message, index) => (
+                        <ChatMessage
+                          key={index}
+                          message={message.text}
+                          isBot={message.isBot}
+                          isStaff={message.isStaff}
+                          isUrgent={message.isUrgent}
+                        />
+                      ))
+                    )}
+                    {isLoading && (
+                      <div className="p-4 rounded-lg bg-blue-50">
+                        <LoadingDots />
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <button onClick={() => setShowPopup(true)}>
+                    Access Denied
+                  </button>
+                )}
+                <ChatInput
+                  onSendMessage={handleSendMessage}
+                  isLoading={isLoading}
+                />
               </Tab.Panel>
               <Tab.Panel>
-                <CarePlanGenerator />
+                {canAccessCarePlan ? (
+                  <CarePlanGenerator />
+                ) : (
+                  <button onClick={() => setShowPopup(true)}>
+                    Access Denied
+                  </button>
+                )}
               </Tab.Panel>
               <Tab.Panel>
-                <MedicalLearning />
+                {canAccessLearningHub ? (
+                  <MedicalLearning />
+                ) : (
+                  <button onClick={() => setShowPopup(true)}>
+                    Access Denied
+                  </button>
+                )}
               </Tab.Panel>
             </Tab.Panels>
           </Tab.Group>
         </div>
       </main>
+
+      {showPopup && (
+        <AccessDeniedPopup
+          onClose={() => setShowPopup(false)}
+          handleManageBilling={handleManageBilling}
+        />
+      )}
     </div>
   );
 }
