@@ -96,10 +96,6 @@ export const handler: Handler = async (event) => {
               console.log(
                 "Customer not found in the database, creating new Stripe customer."
               );
-
-              // const customer = await stripeClient.customers.create({
-              //   email: userEmail,
-              // });
               await userDoc.ref.update({
                 subscription: {
                   plan: plan,
@@ -121,90 +117,83 @@ export const handler: Handler = async (event) => {
         }
         break;
       }
-      // case "customer.subscription.updated": {
-      //   try {
-      //     // Retrieve the subscription object from the event
-      //     const subscription = eventReceived.data.object;
+      case "customer.subscription.updated": {
+        try {
+          const subscription = eventReceived.data.object;
+          const customerId = subscription.customer;
+          const planId = subscription.items.data[0]?.price.id;
 
-      //     const customerId = subscription.customer; // Stripe customer ID
-      //     const planId = subscription.items.data[0]?.price.id; // Plan price ID
+          console.log("Customer ID:", customerId);
+          console.log("Plan ID:", planId);
 
-      //     console.log("Customer ID:", customerId);
-      //     console.log("Plan ID:", planId);
+          if (!customerId || !planId) {
+            console.error("Missing required fields: customerId or planId.");
+            break;
+          }
+          const plan = getPlanNameByPriceId(planId);
+          if (!plan) {
+            console.error("Invalid plan ID provided.");
+            break;
+          }
+          console.log("Plan Name:", plan);
 
-      //     // Validate required fields
-      //     if (!customerId || !planId) {
-      //       console.error("Missing required fields: customerId or planId.");
-      //       break;
-      //     }
+          const userRef = dbAdmin
+            .collection("User")
+            .where("subscription.stripeCustomerId", "==", customerId);
+          const userSnapshot = await userRef.get();
+          if (userSnapshot.empty) {
+            console.error(
+              "User with the given Stripe customer ID not found in the database."
+            );
+            break;
+          }
+          const userDoc = userSnapshot.docs[0];
 
-      //     // Get the plan name using the plan ID
-      //     const plan = getPlanNameByPriceId(planId);
-      //     if (!plan) {
-      //       console.error("Invalid plan ID provided.");
-      //       break;
-      //     }
-      //     console.log("Plan Name:", plan);
+          await userDoc.ref.update({
+            subscription: {
+              plan: plan,
+              status: "Active",
+              startedAt: new Date(),
+              expiresAt: new Date(Date.now() + getPlanDuration(plan)), // Assuming plan duration is in milliseconds
+              stripeCustomerId: customerId,
+              subscriptionId: planId,
+            },
+          });
+          console.log("User subscription updated successfully.");
+        } catch (error) {
+          console.error("Error handling customer.subscription.updated:", error);
+        }
+        break;
+      }
 
-      //     // Query the database for the user by Stripe customer ID
-      //     const userRef = dbAdmin
-      //       .collection("User")
-      //       .where("subscription.stripeCustomerId", "==", customerId);
-      //     const userSnapshot = await userRef.get();
+      case "customer.subscription.deleted": {
+        const subscription = eventReceived.data.object;
+        const stripeCustomerId = subscription.customer;
 
-      //     if (userSnapshot.empty) {
-      //       console.error(
-      //         "User with the given Stripe customer ID not found in the database."
-      //       );
-      //       break;
-      //     }
+        const usersRef = dbAdmin.collection("User");
+        const userQuery = await usersRef
+          .where("stripeCustomerId", "==", stripeCustomerId)
+          .get();
 
-      //     // Update the user's subscription in the database
-      //     const userDoc = userSnapshot.docs[0];
-      //     const updatedSubscription = {
-      //       plan: plan,
-      //       status: "Active",
-      //       subscriptionId: planId,
-      //       stripeCustomerId: customerId,
-      //     };
+        if (!userQuery.empty) {
+          const userDoc = userQuery.docs[0];
 
-      //     await userDoc.ref.update({ subscription: updatedSubscription });
+          // Update user subscription status to inactive
+          await userDoc.ref.update({
+            subscription: {
+              plan: "Free",
+              status: "Inactive",
+              startedAt: new Date(0), // Invalid date
+              expiresAt: new Date(0), // Invalid date
+            },
+            stripeCustomerId: null,
+            subscriptionId: null,
+          });
 
-      //     console.log("User subscription updated successfully.");
-      //   } catch (error) {
-      //     console.error("Error handling customer.subscription.updated:", error);
-      //   }
-      //   break;
-      // }
-
-      // case "customer.subscription.deleted": {
-      //   const subscription = eventReceived.data.object;
-      //   const stripeCustomerId = subscription.customer;
-
-      //   const usersRef = dbAdmin.collection("User");
-      //   const userQuery = await usersRef
-      //     .where("stripeCustomerId", "==", stripeCustomerId)
-      //     .get();
-
-      //   if (!userQuery.empty) {
-      //     const userDoc = userQuery.docs[0];
-
-      //     // Update user subscription status to inactive
-      //     await userDoc.ref.update({
-      //       subscription: {
-      //         plan: "Free",
-      //         status: "Inactive",
-      //         startedAt: new Date(0), // Invalid date
-      //         expiresAt: new Date(0), // Invalid date
-      //       },
-      //       stripeCustomerId: null,
-      //       subscriptionId: null,
-      //     });
-
-      //     console.log("User subscription canceled, set to Free plan.");
-      //   }
-      //   break;
-      // }
+          console.log("User subscription canceled, set to Free plan.");
+        }
+        break;
+      }
 
       default:
         console.log(`Unhandled event type ${eventReceived.type}`);
