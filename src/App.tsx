@@ -133,7 +133,7 @@ export default function App() {
         <div className="flex items-center justify-between max-w-4xl px-4 py-4 mx-auto">
           <div className="flex items-center gap-2">
             <Stethoscope className="w-6 h-6 text-blue-500" />
-            <h1 className="text-xl font-bold text-gray-900">HealthChat</h1>
+            <h1 className="text-xl font-bold text-gray-900">HealthChat Business</h1>
           </div>
           <div className="flex items-center gap-4">
             {subscription && (
