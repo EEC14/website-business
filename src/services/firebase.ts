@@ -20,7 +20,7 @@ const firebaseConfig = {
 };
 
 // Define the correct access code
-const CORRECT_ACCESS_CODE = process.env.CORRECT_ACCESS_CODE;
+const CORRECT_ACCESS_CODE = "HEALTHSTAFF2024";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
