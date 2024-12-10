@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Stethoscope, Mail, Lock, AlertCircle } from 'lucide-react';
+import { Stethoscope, Mail, Lock, AlertCircle, KeyRound } from 'lucide-react';
 import { createUser, signIn } from '../services/firebase';
 
 export const AuthPage: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [accessCode, setAccessCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -18,7 +19,8 @@ export const AuthPage: React.FC = () => {
       if (isLogin) {
         await signIn(email, password);
       } else {
-        await createUser(email, password);
+        // Pass access code for signup
+        await createUser(email, password, accessCode);
       }
     } catch (error: any) {
       setError(error.message);
@@ -84,6 +86,25 @@ export const AuthPage: React.FC = () => {
               <Lock className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" />
             </div>
           </div>
+
+          {!isLogin && (
+            <div>
+              <label htmlFor="accessCode" className="block text-sm font-medium text-gray-700">
+                Access Code
+              </label>
+              <div className="mt-1 relative">
+                <input
+                  id="accessCode"
+                  type="text"
+                  required
+                  value={accessCode}
+                  onChange={(e) => setAccessCode(e.target.value)}
+                  className="appearance-none block w-full px-3 py-2 pl-10 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                />
+                <KeyRound className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" />
+              </div>
+            </div>
+          )}
 
           <button
             type="submit"
