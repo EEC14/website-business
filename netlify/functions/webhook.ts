@@ -107,7 +107,7 @@ export const handler: Handler = async (event) => {
                   startedAt: new Date(),
                   expiresAt: new Date(Date.now() + getPlanDuration(plan)), // Assuming plan duration is in milliseconds
                   stripeCustomerId: customerId,
-                  subscriptionId: session.id,
+                  subscriptionId: planId,
                 },
               });
             }
@@ -121,90 +121,90 @@ export const handler: Handler = async (event) => {
         }
         break;
       }
-      case "customer.subscription.updated": {
-        try {
-          // Retrieve the subscription object from the event
-          const subscription = eventReceived.data.object;
+      // case "customer.subscription.updated": {
+      //   try {
+      //     // Retrieve the subscription object from the event
+      //     const subscription = eventReceived.data.object;
 
-          const customerId = subscription.customer; // Stripe customer ID
-          const planId = subscription.items.data[0]?.price.id; // Plan price ID
+      //     const customerId = subscription.customer; // Stripe customer ID
+      //     const planId = subscription.items.data[0]?.price.id; // Plan price ID
 
-          console.log("Customer ID:", customerId);
-          console.log("Plan ID:", planId);
+      //     console.log("Customer ID:", customerId);
+      //     console.log("Plan ID:", planId);
 
-          // Validate required fields
-          if (!customerId || !planId) {
-            console.error("Missing required fields: customerId or planId.");
-            break;
-          }
+      //     // Validate required fields
+      //     if (!customerId || !planId) {
+      //       console.error("Missing required fields: customerId or planId.");
+      //       break;
+      //     }
 
-          // Get the plan name using the plan ID
-          const plan = getPlanNameByPriceId(planId);
-          if (!plan) {
-            console.error("Invalid plan ID provided.");
-            break;
-          }
-          console.log("Plan Name:", plan);
+      //     // Get the plan name using the plan ID
+      //     const plan = getPlanNameByPriceId(planId);
+      //     if (!plan) {
+      //       console.error("Invalid plan ID provided.");
+      //       break;
+      //     }
+      //     console.log("Plan Name:", plan);
 
-          // Query the database for the user by Stripe customer ID
-          const userRef = dbAdmin
-            .collection("User")
-            .where("subscription.stripeCustomerId", "==", customerId);
-          const userSnapshot = await userRef.get();
+      //     // Query the database for the user by Stripe customer ID
+      //     const userRef = dbAdmin
+      //       .collection("User")
+      //       .where("subscription.stripeCustomerId", "==", customerId);
+      //     const userSnapshot = await userRef.get();
 
-          if (userSnapshot.empty) {
-            console.error(
-              "User with the given Stripe customer ID not found in the database."
-            );
-            break;
-          }
+      //     if (userSnapshot.empty) {
+      //       console.error(
+      //         "User with the given Stripe customer ID not found in the database."
+      //       );
+      //       break;
+      //     }
 
-          // Update the user's subscription in the database
-          const userDoc = userSnapshot.docs[0];
-          const updatedSubscription = {
-            plan: plan,
-            status: "Active",
-            subscriptionId: planId,
-            stripeCustomerId: customerId,
-          };
+      //     // Update the user's subscription in the database
+      //     const userDoc = userSnapshot.docs[0];
+      //     const updatedSubscription = {
+      //       plan: plan,
+      //       status: "Active",
+      //       subscriptionId: planId,
+      //       stripeCustomerId: customerId,
+      //     };
 
-          await userDoc.ref.update({ subscription: updatedSubscription });
+      //     await userDoc.ref.update({ subscription: updatedSubscription });
 
-          console.log("User subscription updated successfully.");
-        } catch (error) {
-          console.error("Error handling customer.subscription.updated:", error);
-        }
-        break;
-      }
+      //     console.log("User subscription updated successfully.");
+      //   } catch (error) {
+      //     console.error("Error handling customer.subscription.updated:", error);
+      //   }
+      //   break;
+      // }
 
-      case "customer.subscription.deleted": {
-        const subscription = eventReceived.data.object;
-        const stripeCustomerId = subscription.customer;
+      // case "customer.subscription.deleted": {
+      //   const subscription = eventReceived.data.object;
+      //   const stripeCustomerId = subscription.customer;
 
-        const usersRef = dbAdmin.collection("User");
-        const userQuery = await usersRef
-          .where("stripeCustomerId", "==", stripeCustomerId)
-          .get();
+      //   const usersRef = dbAdmin.collection("User");
+      //   const userQuery = await usersRef
+      //     .where("stripeCustomerId", "==", stripeCustomerId)
+      //     .get();
 
-        if (!userQuery.empty) {
-          const userDoc = userQuery.docs[0];
+      //   if (!userQuery.empty) {
+      //     const userDoc = userQuery.docs[0];
 
-          // Update user subscription status to inactive
-          await userDoc.ref.update({
-            subscription: {
-              plan: "Free",
-              status: "Inactive",
-              startedAt: new Date(0), // Invalid date
-              expiresAt: new Date(0), // Invalid date
-            },
-            stripeCustomerId: null,
-            subscriptionId: null,
-          });
+      //     // Update user subscription status to inactive
+      //     await userDoc.ref.update({
+      //       subscription: {
+      //         plan: "Free",
+      //         status: "Inactive",
+      //         startedAt: new Date(0), // Invalid date
+      //         expiresAt: new Date(0), // Invalid date
+      //       },
+      //       stripeCustomerId: null,
+      //       subscriptionId: null,
+      //     });
 
-          console.log("User subscription canceled, set to Free plan.");
-        }
-        break;
-      }
+      //     console.log("User subscription canceled, set to Free plan.");
+      //   }
+      //   break;
+      // }
 
       default:
         console.log(`Unhandled event type ${eventReceived.type}`);
