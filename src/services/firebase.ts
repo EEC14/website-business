@@ -19,11 +19,19 @@ const firebaseConfig = {
   measurementId: "G-9J4GXSVRKK",
 };
 
+// Define the correct access code
+const CORRECT_ACCESS_CODE = 'HEALTHSTAFF2024';
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-export const createUser = async (email: string, password: string) => {
+export const createUser = async (email: string, password: string, accessCode: string) => {
+  // Validate access code
+  if (accessCode.toUpperCase().trim() !== CORRECT_ACCESS_CODE) {
+    throw new Error("Invalid access code. Please contact support if you believe this is an error.");
+  }
+
   try {
     const userCredential = await createUserWithEmailAndPassword(
       auth,
@@ -44,6 +52,7 @@ export const createUser = async (email: string, password: string) => {
         subscriptionId: null,
         stripeCustomerId: null,
       },
+      accessCodeVerified: true, // Add a flag to indicate access code verification
     });
     return user;
   } catch (error: any) {
@@ -51,6 +60,7 @@ export const createUser = async (email: string, password: string) => {
   }
 };
 
+// Rest of the code remains the same as in the original file
 export const signIn = async (email: string, password: string) => {
   try {
     const userCredential = await signInWithEmailAndPassword(
@@ -106,8 +116,9 @@ export async function updateUserSubscription(
   const userDoc = doc(db, "User", uid);
   await setDoc(userDoc, { subscription }, { merge: true });
 }
+
 export async function getUserDetails(uid: string) {
-  const docRef = doc(db, "users", uid); // Adjust the path if necessary
+  const docRef = doc(db, "users", uid);
   const docSnap = await getDoc(docRef);
 
   if (docSnap.exists()) {
