@@ -117,12 +117,12 @@ export const AuthPage: React.FC = () => {
           </button>
           <div className="text-sm text-gray-600">
               By signing up, you agree to our{' '}
-              <a href="healthchat-patient.esbhealthcare.com/terms" className="text-blue-600 hover:text-blue-800">
+              <a href="https://healthchat.esbhealthcare.com/terms" className="text-blue-600 hover:text-blue-800">
                 Terms of Service
               </a>  
               {' '}
               and{' '}
-              <a href="healthchat-patient.esbhealthcare.com/privacy" className="text-blue-600 hover:text-blue-800">
+              <a href="https://healthchat.esbhealthcare.com/privacy" className="text-blue-600 hover:text-blue-800">
                 Privacy Policy
               </a>
           </div>
