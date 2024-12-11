@@ -113,7 +113,16 @@ export const AuthPage: React.FC = () => {
           >
             {loading ? 'Please wait...' : isLogin ? 'Sign In' : 'Create Account'}
           </button>
-
+          <div className="text-sm text-gray-600">
+              By signing up, you agree to our{' '}
+              <Link to="/terms" className="text-blue-600 hover:text-blue-800">
+                Terms of Service
+              </Link>{' '}
+              and{' '}
+              <Link to="/privacy" className="text-blue-600 hover:text-blue-800">
+                Privacy Policy
+              </Link>
+          </div>
           <div className="text-center">
             <button
               type="button"
