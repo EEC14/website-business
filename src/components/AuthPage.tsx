@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
 import { Stethoscope, Mail, Lock, AlertCircle, KeyRound } from 'lucide-react';
 import { createUser, signIn } from '../services/firebase';
 import Terms from '../pages/Terms';
@@ -118,13 +117,14 @@ export const AuthPage: React.FC = () => {
           </button>
           <div className="text-sm text-gray-600">
               By signing up, you agree to our{' '}
-              <Link to="/terms" className="text-blue-600 hover:text-blue-800">
+              <a href="healthchat-patient.esbhealthcare.com/terms" className="text-blue-600 hover:text-blue-800">
                 Terms of Service
-              </Link>{' '}
+              </a>  
+              {' '}
               and{' '}
-              <Link to="/privacy" className="text-blue-600 hover:text-blue-800">
+              <a href="healthchat-patient.esbhealthcare.com/privacy" className="text-blue-600 hover:text-blue-800">
                 Privacy Policy
-              </Link>
+              </a>
           </div>
           <div className="text-center">
             <button
