@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Stethoscope, Mail, Lock, AlertCircle, KeyRound } from 'lucide-react';
 import { createUser, signIn } from '../services/firebase';
-import Terms from '../pages/Terms';
-import Privacy from '../pages/Privacy';
+import privacy from '../assets/privacy_policy.pdf';
+import terms from '../assets/terms_of_service.pdf';
 
 export const AuthPage: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
@@ -117,12 +117,12 @@ export const AuthPage: React.FC = () => {
           </button>
           <div className="text-sm text-gray-600">
               By signing up, you agree to our{' '}
-              <a href="/terms" className="text-blue-600 hover:text-blue-800">
+              <a href={terms} className="text-blue-600 hover:text-blue-800">
                 Terms of Service
               </a>  
               {' '}
               and{' '}
-              <a href="/privacy" className="text-blue-600 hover:text-blue-800">
+              <a href={privacy} className="text-blue-600 hover:text-blue-800">
                 Privacy Policy
               </a>
           </div>
