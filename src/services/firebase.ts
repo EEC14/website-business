@@ -8,6 +8,7 @@ import {
   User,
 } from "firebase/auth";
 import { getFirestore, doc, getDoc, setDoc } from "firebase/firestore";
+import { getAnalytics } from "firebase/analytics";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDl1CvwMfHDwn1aGT1WpSUN_oSzuyYyt-c",
@@ -25,7 +26,7 @@ const CORRECT_ACCESS_CODE = "HEALTHSTAFF2024";
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-
+const analytics = getAnalytics(app);
 export const createUser = async (email: string, password: string, accessCode: string) => {
   // Validate access code
   if (accessCode.toUpperCase().trim() !== CORRECT_ACCESS_CODE) {
