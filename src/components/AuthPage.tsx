@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Stethoscope, Mail, Lock, AlertCircle, KeyRound } from 'lucide-react';
 import { createUser, signIn } from '../services/firebase';
+import Terms from '../pages/Terms';
+import Privacy from '../pages/Privacy';
 
 export const AuthPage: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
