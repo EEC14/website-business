@@ -21,6 +21,8 @@ import { signOut } from "./services/firebase";
 import { clsx } from "clsx";
 import { hasFeatureAccess } from "./utils/hasFeatureAccess";
 import { AccessDeniedPopup } from "./components/AccessDeniedPopup";
+import Terms from './pages/Terms';
+import Privacy from './pages/Privacy';
 
 type Message = {
   text: string;
