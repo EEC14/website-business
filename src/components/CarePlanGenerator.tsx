@@ -183,7 +183,7 @@ const PlanResult: React.FC<PlanResultProps> = ({ plan, type, onReset }) => {
   );
 };
 
-const CarePlanGenerator: React.FC = () => {
+export const CarePlanGenerator: React.FC = () => {
   const [planType, setPlanType] = useState<PlanType | null>(null);
   const [step, setStep] = useState<"select" | "questionnaire" | "plan">(
     "select"
@@ -292,5 +292,5 @@ const CarePlanGenerator: React.FC = () => {
   );
 };
 
-export default CarePlanGenerator;
+
 export { PlanType };
