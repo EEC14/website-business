@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { AlertTriangle, Dumbbell, Utensils, ArrowRight } from "lucide-react";
+import { Loader2, Printer, Download, ArrowLeft } from 'lucide-react';
 import { generatePlanQuestions, generatePlan } from "../services/carePlan";
 
 export type PlanType = 'workout' | 'diet';
