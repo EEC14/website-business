@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { AlertTriangle, Dumbbell, Utensils, ArrowRight } from "lucide-react";
-import { generatePlanQuestions, generatePlan } from "../services/plan-generator";
+import { generatePlanQuestions, generatePlan } from "../services/carePlan";
 
 export type PlanType = 'workout' | 'diet';
 
