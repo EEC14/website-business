@@ -1,5 +1,6 @@
 import OpenAI from "openai";
-import { PlanType } from "../components/planquestionnaire";
+
+export type PlanType = 'workout' | 'diet';
 
 const openai = new OpenAI({
   apiKey: import.meta.env.VITE_OPENAI_API_KEY,
