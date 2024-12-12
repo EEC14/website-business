@@ -140,7 +140,7 @@ export default function App() {
           <div className="flex items-center gap-4">
             {subscription && (
               <button className="" onClick={handleManageBilling}>
-                Mange subscription
+                Manage subscription
               </button>
             )}
             <div className="flex items-center gap-2 px-3 py-1 text-sm rounded-full bg-blue-50">
