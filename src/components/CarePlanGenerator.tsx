@@ -9,7 +9,7 @@ interface PlanQuestionnaireProps {
   onPlanGenerated: (plan: string) => void;
 }
 
-const PlanQuestionnaire: React.FC<PlanQuestionnaireProps> = ({
+export const PlanQuestionnaire: React.FC<PlanQuestionnaireProps> = ({
   type,
   onPlanGenerated,
 }) => {
