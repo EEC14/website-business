@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Stethoscope, Mail, Lock, AlertCircle, KeyRound } from 'lucide-react';
 import { createUser, signIn } from '../services/firebase';
 import privacy from '../assets/privacy_policy.pdf';
-import terms from '../assets/terms_of_service.pdf';
+import terms from '../assets/terms_of_service_business.pdf';
 
 export const AuthPage: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
