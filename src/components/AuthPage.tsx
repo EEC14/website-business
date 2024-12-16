@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Stethoscope, Mail, Lock, AlertCircle, KeyRound } from 'lucide-react';
+import { Stethoscope, Mail, Lock, AlertCircle, KeyRound, CheckSquare } from 'lucide-react';
 import { createUser, signIn } from '../services/firebase';
 import privacy from '../assets/Privacy_Policy.pdf';
 import terms from '../assets/Terms_Of_Service_Business.pdf';
@@ -9,6 +9,7 @@ export const AuthPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [accessCode, setAccessCode] = useState('');
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -21,6 +22,10 @@ export const AuthPage: React.FC = () => {
       if (isLogin) {
         await signIn(email, password);
       } else {
+        // Check terms acceptance only during signup
+        if (!termsAccepted) {
+          throw new Error('Please accept the Terms of Service and Privacy Policy');
+        }
         // Pass access code for signup
         await createUser(email, password, accessCode);
       }
@@ -90,22 +95,45 @@ export const AuthPage: React.FC = () => {
           </div>
 
           {!isLogin && (
-            <div>
-              <label htmlFor="accessCode" className="block text-sm font-medium text-gray-700">
-                Access Code
-              </label>
-              <div className="mt-1 relative">
-                <input
-                  id="accessCode"
-                  type="text"
-                  required
-                  value={accessCode}
-                  onChange={(e) => setAccessCode(e.target.value)}
-                  className="appearance-none block w-full px-3 py-2 pl-10 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
-                <KeyRound className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" />
+            <>
+              <div>
+                <label htmlFor="accessCode" className="block text-sm font-medium text-gray-700">
+                  Access Code
+                </label>
+                <div className="mt-1 relative">
+                  <input
+                    id="accessCode"
+                    type="text"
+                    required
+                    value={accessCode}
+                    onChange={(e) => setAccessCode(e.target.value)}
+                    className="appearance-none block w-full px-3 py-2 pl-10 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <KeyRound className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" />
+                </div>
               </div>
-            </div>
+
+              <div className="flex items-center">
+                <input
+                  id="terms"
+                  type="checkbox"
+                  required
+                  checked={termsAccepted}
+                  onChange={() => setTermsAccepted(!termsAccepted)}
+                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                />
+                <label htmlFor="terms" className="ml-2 block text-sm text-gray-900">
+                  I accept the{' '}
+                  <a href={terms} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800">
+                    Terms of Service
+                  </a>{' '}
+                  and{' '}
+                  <a href={privacy} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800">
+                    Privacy Policy
+                  </a>
+                </label>
+              </div>
+            </>
           )}
 
           <button
@@ -115,17 +143,7 @@ export const AuthPage: React.FC = () => {
           >
             {loading ? 'Please wait...' : isLogin ? 'Sign In' : 'Create Account'}
           </button>
-          <div className="text-sm text-gray-600">
-              By signing up, you agree to our{' '}
-              <a href={terms} className="text-blue-600 hover:text-blue-800">
-                Terms of Service
-              </a>  
-              {' '}
-              and{' '}
-              <a href={privacy} className="text-blue-600 hover:text-blue-800">
-                Privacy Policy
-              </a>
-          </div>
+
           <div className="text-center">
             <button
               type="button"
