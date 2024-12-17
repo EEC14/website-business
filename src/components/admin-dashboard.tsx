@@ -9,7 +9,7 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { UserPlus, Trash2 } from 'react-icons/lucide';
+import { UserPlus, Trash2 } from 'lucide-react';
 
 // Interfaces
 interface OrganizationMember {
