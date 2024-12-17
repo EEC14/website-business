@@ -86,14 +86,24 @@ const inviteMember = async () => {
       throw new Error(`Email must match organization domain: ${organization.domain}`);
     }
 
-    // Step 2: Generate a temporary password
+    // Step 2: Ask for admin credentials to confirm the operation
+    const adminEmail = auth.currentUser?.email;
+    const adminPassword = prompt('Please enter your password to confirm:');
+    if (!adminEmail || !adminPassword) {
+      throw new Error('Admin password is required to proceed.');
+    }
+
+    // Step 3: Generate a temporary password
     const tempPassword = generateRandomPassword();
 
-    // Step 3: Create user in Firebase Authentication
+    // Step 4: Temporarily log out admin to create the invited user
+    await signInWithEmailAndPassword(auth, adminEmail, adminPassword);
+
+    // Step 5: Create user in Firebase Authentication
     const userCredential = await createUserWithEmailAndPassword(auth, newMemberEmail, tempPassword);
     await sendEmailVerification(userCredential.user);
 
-    // Step 4: Create a user profile with matching structure
+    // Step 6: Create a user profile with the matching structure
     const userProfile = {
       uid: userCredential.user.uid,
       email: newMemberEmail,
@@ -112,24 +122,26 @@ const inviteMember = async () => {
       temporaryPassword: tempPassword, // Temporary field for invited users
     };
 
-    // Step 5: Save to Firestore
+    // Step 7: Save to Firestore
     const userRef = doc(firestore, 'User', userCredential.user.uid);
     await setDoc(userRef, userProfile);
 
-    // Step 6: Update organization members
+    // Step 8: Update organization members
     await updateDoc(orgRef, {
       members: arrayUnion(newMemberEmail),
       ...(selectedRole === 'admin' && { admins: arrayUnion(newMemberEmail) }),
     });
 
-    // Success: Clear input fields
+    // Step 9: Re-authenticate as admin to maintain session
+    await signInWithEmailAndPassword(auth, adminEmail, adminPassword);
+
+    // Step 10: Success: Clear input fields
     setNewMemberEmail('');
     setSelectedRole('member');
   } catch (err) {
     setError(err instanceof Error ? err.message : 'Failed to invite member.');
   }
 };
-
 
   if (isLoading) return <div>Loading...</div>;
   if (error) return <div>{error}</div>;
