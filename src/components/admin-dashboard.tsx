@@ -179,7 +179,7 @@ const inviteMember = async () => {
             <tr key={user.email}>
               <td className="p-2">{user.email}</td>
               <td className="p-2">{user.role}</td>
-              <td className="p-2">{user.plan}</td>
+              <td className="p-2">{user.subscription.plan}</td>
               <td className="p-2">{user.temporaryPassword || 'N/A'}</td>
             </tr>
           ))}
