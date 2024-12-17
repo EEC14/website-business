@@ -74,72 +74,62 @@ export const AdminDashboard: React.FC = () => {
   }, [auth, firestore]);
 
   // Invite a new member
-  const inviteMember = async () => {
-    if (!organization) return;
+const inviteMember = async () => {
+  if (!organization) return;
 
-    try {
-      setError('');
-      const orgRef = doc(firestore, 'organizations', organization.id);
+  try {
+    setError('');
+    const orgRef = doc(firestore, 'organizations', organization.id);
 
-      // Check if email matches organization domain
-      if (!newMemberEmail.endsWith(`@${organization.domain}`)) {
-        throw new Error(`Email must match organization domain: ${organization.domain}`);
-      }
+    // Step 1: Validate email domain
+    if (!newMemberEmail.endsWith(`@${organization.domain}`)) {
+      throw new Error(`Email must match organization domain: ${organization.domain}`);
+    }
 
-      // Step 1: Save the current admin session
-      const adminEmail = auth.currentUser?.email;
-      const adminPassword = prompt('Please enter your password to confirm:');
-      if (!adminEmail || !adminPassword) {
-        throw new Error('Admin password is required to proceed.');
-      }
+    // Step 2: Generate a temporary password
+    const tempPassword = generateRandomPassword();
 
-      // Step 2: Generate temporary password
-      const tempPassword = generateRandomPassword();
+    // Step 3: Create user in Firebase Authentication
+    const userCredential = await createUserWithEmailAndPassword(auth, newMemberEmail, tempPassword);
+    await sendEmailVerification(userCredential.user);
 
-      // Step 3: Create user in Firebase Authentication
-      const userCredential = await createUserWithEmailAndPassword(auth, newMemberEmail, tempPassword);
-      await sendEmailVerification(userCredential.user);
-
-      // Step 4: Add user to Firestore
-      const userProfile = {
-        uid: userCredential.user.uid,
-        email: newMemberEmail,
-        role: selectedRole,
-        temporaryPassword: tempPassword,
-        organizationId: organization.id,
-        createdAt: new Date().toISOString(),
-        subscription: {
-        plan: "Free",
-        status: "Active",
+    // Step 4: Create a user profile with matching structure
+    const userProfile = {
+      uid: userCredential.user.uid,
+      email: newMemberEmail,
+      role: selectedRole,
+      organizationId: organization.id,
+      createdAt: new Date().toISOString(),
+      status: 'invited',
+      subscription: {
+        plan: 'Free',
+        status: 'Active',
         startedAt: new Date().toISOString(),
         expiresAt: null,
         subscriptionId: null,
         stripeCustomerId: null,
       },
-      accessCodeVerified: true, // Add a flag to indicate access code verification
-      };
-      const userRef = doc(firestore, 'User', userCredential.user.uid);
-      await setDoc(userRef, userProfile);
+      temporaryPassword: tempPassword, // Temporary field for invited users
+    };
 
-      // Step 5: Update organization members and admins
-      await updateDoc(orgRef, {
-        members: arrayUnion(newMemberEmail),
-        ...(selectedRole === 'admin' && { admins: arrayUnion(newMemberEmail) }),
-      });
+    // Step 5: Save to Firestore
+    const userRef = doc(firestore, 'User', userCredential.user.uid);
+    await setDoc(userRef, userProfile);
 
-      // Step 6: Re-authenticate as the admin
-      await signInWithEmailAndPassword(auth, adminEmail, adminPassword);
+    // Step 6: Update organization members
+    await updateDoc(orgRef, {
+      members: arrayUnion(newMemberEmail),
+      ...(selectedRole === 'admin' && { admins: arrayUnion(newMemberEmail) }),
+    });
 
-      // Step 7: Open "/" in a new tab
-      window.open('/', '_blank');
+    // Success: Clear input fields
+    setNewMemberEmail('');
+    setSelectedRole('member');
+  } catch (err) {
+    setError(err instanceof Error ? err.message : 'Failed to invite member.');
+  }
+};
 
-      // Clear input fields
-      setNewMemberEmail('');
-      setSelectedRole('member');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to invite member.');
-    }
-  };
 
   if (isLoading) return <div>Loading...</div>;
   if (error) return <div>{error}</div>;
