@@ -44,9 +44,8 @@ export const AdminDashboard: React.FC = () => {
         const orgsRef = collection(firestore, 'organizations');
         const q = query(
           orgsRef, 
-          where('members', 'array-contains-any', [
-            { email: auth.currentUser.email, role: 'admin' },
-            { email: auth.currentUser.email, role: 'owner' }
+          where('admins', 'array-contains-any', [
+            { email: auth.currentUser.email },
           ])
         );
 
