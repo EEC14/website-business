@@ -12,22 +12,16 @@ import { getAuth, onAuthStateChanged } from 'firebase/auth';
 import { UserPlus, Trash2 } from 'lucide-react';
 
 // Interfaces
-interface OrganizationMember {
-  email: string;
-  role: 'admin' | 'member' | 'owner';
-  status: 'active' | 'invited' | 'suspended';
-}
-
 interface Organization {
   id: string;
   name: string;
   domain: string;
-  members: OrganizationMember[];
+  admins: string[];
+  members: string[];
 }
 
 export const AdminDashboard: React.FC = () => {
   const [organization, setOrganization] = useState<Organization | null>(null);
-  const [userRole, setUserRole] = useState<string | null>(null);
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -35,41 +29,30 @@ export const AdminDashboard: React.FC = () => {
   const auth = getAuth();
   const firestore = getFirestore();
 
+  // Fetch organization where user is in the 'admins' array
   useEffect(() => {
-    const fetchOrganization = async (user: any) => {
+    const fetchOrganization = async (userEmail: string) => {
       try {
-        setIsLoading(true);
-        const userRef = doc(firestore, 'User', user.uid);
-        const userDoc = await getDocs(query(collection(firestore, 'User'), where('uid', '==', user.uid)));
+        const orgRef = collection(firestore, 'organizations');
+        const orgQuery = query(orgRef, where('admins', 'array-contains', userEmail));
+        const querySnapshot = await getDocs(orgQuery);
 
-        if (!userDoc.empty) {
-          const userData = userDoc.docs[0].data();
-          const organizationRef = doc(firestore, 'organizations', userData.organizationId);
-
-          // Fetch Organization Data
-          const orgSnapshot = await getDocs(query(collection(firestore, 'organizations'), where('id', '==', userData.organizationId)));
-          if (!orgSnapshot.empty) {
-            const orgData = orgSnapshot.docs[0].data() as Organization;
-            const currentUser = orgData.members.find((member) => member.email === user.email);
-
-            if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'owner')) {
-              setOrganization(orgData);
-              setUserRole(currentUser.role);
-            } else {
-              throw new Error('You do not have permission to access this page.');
-            }
-          }
+        if (!querySnapshot.empty) {
+          const orgData = querySnapshot.docs[0].data() as Organization;
+          setOrganization(orgData);
+        } else {
+          throw new Error('You are not authorized to access this dashboard.');
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch organization details');
+        setError(err instanceof Error ? err.message : 'Failed to load organization data.');
       } finally {
         setIsLoading(false);
       }
     };
 
     onAuthStateChanged(auth, (user) => {
-      if (user) {
-        fetchOrganization(user);
+      if (user && user.email) {
+        fetchOrganization(user.email);
       } else {
         setError('You must be logged in to access this page.');
         setIsLoading(false);
@@ -77,15 +60,19 @@ export const AdminDashboard: React.FC = () => {
     });
   }, [auth, firestore]);
 
+  // Function to invite a new member
   const inviteMember = async () => {
     if (!organization) return;
     try {
       const orgRef = doc(firestore, 'organizations', organization.id);
-      const updatedMembers = [
-        ...organization.members,
-        { email: newMemberEmail, role: 'member', status: 'invited' },
-      ];
+
+      if (!newMemberEmail.endsWith(`@${organization.domain}`)) {
+        throw new Error(`Email must match organization domain: ${organization.domain}`);
+      }
+
+      const updatedMembers = [...organization.members, newMemberEmail];
       await updateDoc(orgRef, { members: updatedMembers });
+
       setOrganization({ ...organization, members: updatedMembers });
       setNewMemberEmail('');
     } catch (err) {
@@ -116,18 +103,18 @@ export const AdminDashboard: React.FC = () => {
           <tr>
             <th>Email</th>
             <th>Role</th>
-            <th>Status</th>
           </tr>
         </thead>
         <tbody>
           {organization.members.map((member) => (
-            <tr key={member.email}>
-              <td>{member.email}</td>
-              <td>{member.role}</td>
-              <td>{member.status}</td>
+            <tr key={member}>
+              <td>{member}</td>
+              <td>{organization.admins.includes(member) ? 'Admin' : 'Member'}</td>
               <td>
-                {member.role !== 'owner' && (
-                  <button onClick={() => console.log('Remove member', member.email)}>
+                {organization.admins.includes(member) ? (
+                  'Admin'
+                ) : (
+                  <button onClick={() => console.log('Remove member', member)}>
                     <Trash2 /> Remove
                   </button>
                 )}
@@ -139,4 +126,3 @@ export const AdminDashboard: React.FC = () => {
     </div>
   );
 };
-
