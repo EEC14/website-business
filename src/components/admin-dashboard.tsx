@@ -1,24 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  getFirestore, 
-  doc, 
-  collection, 
-  query, 
-  where, 
-  getDocs, 
-  updateDoc 
+import {
+  getFirestore,
+  doc,
+  collection,
+  query,
+  where,
+  getDocs,
+  updateDoc,
 } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
-import { UserPlus, Trash2, Lock, Shield } from 'lucide-react';
+import { getAuth, onAuthStateChanged } from 'firebase/auth';
+import { UserPlus, Trash2 } from 'react-icons/lucide';
 
-// Organization Member Interface
+// Interfaces
 interface OrganizationMember {
   email: string;
   role: 'admin' | 'member' | 'owner';
   status: 'active' | 'invited' | 'suspended';
 }
 
-// Organization Interface
 interface Organization {
   id: string;
   name: string;
@@ -28,6 +27,7 @@ interface Organization {
 
 export const AdminDashboard: React.FC = () => {
   const [organization, setOrganization] = useState<Organization | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -36,103 +36,101 @@ export const AdminDashboard: React.FC = () => {
   const firestore = getFirestore();
 
   useEffect(() => {
-    const fetchOrganization = async () => {
-      setIsLoading(true);
+    const fetchOrganization = async (user: any) => {
       try {
-        if (!auth.currentUser) throw new Error('No authenticated user');
+        setIsLoading(true);
+        const userRef = doc(firestore, 'User', user.uid);
+        const userDoc = await getDocs(query(collection(firestore, 'User'), where('uid', '==', user.uid)));
 
-        const orgsRef = collection(firestore, 'organizations');
-        const q = query(
-          orgsRef, 
-          where('admins', 'array-contains-any', [
-            { email: auth.currentUser.email },
-          ])
-        );
+        if (!userDoc.empty) {
+          const userData = userDoc.docs[0].data();
+          const organizationRef = doc(firestore, 'organizations', userData.organizationId);
 
-        const querySnapshot = await getDocs(q);
-        if (!querySnapshot.empty) {
-          const orgData = querySnapshot.docs[0].data() as Organization;
-          setOrganization(orgData);
+          // Fetch Organization Data
+          const orgSnapshot = await getDocs(query(collection(firestore, 'organizations'), where('id', '==', userData.organizationId)));
+          if (!orgSnapshot.empty) {
+            const orgData = orgSnapshot.docs[0].data() as Organization;
+            const currentUser = orgData.members.find((member) => member.email === user.email);
+
+            if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'owner')) {
+              setOrganization(orgData);
+              setUserRole(currentUser.role);
+            } else {
+              throw new Error('You do not have permission to access this page.');
+            }
+          }
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'An unknown error occurred');
+        setError(err instanceof Error ? err.message : 'Failed to fetch organization details');
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchOrganization();
-  }, []);
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        fetchOrganization(user);
+      } else {
+        setError('You must be logged in to access this page.');
+        setIsLoading(false);
+      }
+    });
+  }, [auth, firestore]);
 
   const inviteMember = async () => {
     if (!organization) return;
-
     try {
       const orgRef = doc(firestore, 'organizations', organization.id);
-      if (!newMemberEmail.endsWith(`@${organization.domain}`)) {
-        throw new Error('Email must match organization domain');
-      }
-
       const updatedMembers = [
         ...organization.members,
-        { email: newMemberEmail, role: 'member', status: 'invited' }
+        { email: newMemberEmail, role: 'member', status: 'invited' },
       ];
-
       await updateDoc(orgRef, { members: updatedMembers });
-      setNewMemberEmail('');
       setOrganization({ ...organization, members: updatedMembers });
+      setNewMemberEmail('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Invitation failed');
+      setError('Failed to invite member.');
     }
   };
 
-  if (isLoading) return <div>Loading organization details...</div>;
-  if (error) return <div>Error: {error}</div>;
-  if (!organization) return <div>No organization found or insufficient permissions.</div>;
+  if (isLoading) return <div>Loading...</div>;
+  if (error) return <div>{error}</div>;
+  if (!organization) return <div>No organization found.</div>;
 
   return (
-    <div className="container mx-auto p-4">
+    <div>
       <h1>Admin Dashboard - {organization.name}</h1>
       <div>
-        <input 
-          type="email" 
-          placeholder={`Invite new member (must use @${organization.domain})`} 
+        <input
+          type="email"
+          placeholder={`Invite new member (must use @${organization.domain})`}
           value={newMemberEmail}
           onChange={(e) => setNewMemberEmail(e.target.value)}
-          className="border p-2 mr-2"
         />
-        <button onClick={inviteMember} className="bg-blue-500 text-white p-2">
+        <button onClick={inviteMember}>
           <UserPlus /> Invite
         </button>
       </div>
-
-      <table className="table-auto w-full mt-4">
+      <table>
         <thead>
           <tr>
             <th>Email</th>
             <th>Role</th>
             <th>Status</th>
-            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
-          {organization.members.map(member => (
+          {organization.members.map((member) => (
             <tr key={member.email}>
               <td>{member.email}</td>
-              <td>
-                <select 
-                  value={member.role}
-                  onChange={(e) => console.log('Change role', e.target.value)}
-                >
-                  <option value="member">Member</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </td>
+              <td>{member.role}</td>
               <td>{member.status}</td>
               <td>
-                <button className="text-red-500" onClick={() => console.log('Remove', member.email)}>
-                  <Trash2 /> Remove
-                </button>
+                {member.role !== 'owner' && (
+                  <button onClick={() => console.log('Remove member', member.email)}>
+                    <Trash2 /> Remove
+                  </button>
+                )}
               </td>
             </tr>
           ))}
