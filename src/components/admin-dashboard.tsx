@@ -26,7 +26,7 @@ interface Organization {
   members: OrganizationMember[];
 }
 
-const AdminDashboard: React.FC = () => {
+export const AdminDashboard: React.FC = () => {
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [isLoading, setIsLoading] = useState(true);
@@ -143,4 +143,3 @@ const AdminDashboard: React.FC = () => {
   );
 };
 
-export default AdminDashboard;
