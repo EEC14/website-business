@@ -14,9 +14,8 @@ import {
   getAuth,
   createUserWithEmailAndPassword,
   sendEmailVerification,
-  signInWithEmailAndPassword,
 } from 'firebase/auth';
-import { UserPlus, Trash2 } from 'lucide-react';
+import { UserPlus } from 'lucide-react';
 
 // Generate a random password
 const generateRandomPassword = () => {
@@ -28,7 +27,6 @@ export const AdminDashboard: React.FC = () => {
   const [userProfiles, setUserProfiles] = useState<any[]>([]);
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [selectedRole, setSelectedRole] = useState<'member' | 'admin'>('member');
-  const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -74,7 +72,7 @@ export const AdminDashboard: React.FC = () => {
     else setError('You must be logged in to access this page.');
   }, [auth, firestore]);
 
-  // Invite a new member and display the password
+  // Invite a new member
   const inviteMember = async () => {
     if (!organization) return;
 
@@ -99,9 +97,9 @@ export const AdminDashboard: React.FC = () => {
         uid: userCredential.user.uid,
         email: newMemberEmail,
         role: selectedRole,
+        plan: 'Free',
+        temporaryPassword: tempPassword,
         organizationId: organization.id,
-        subscription: { plan: 'Free', status: 'Active' },
-        status: 'invited',
         createdAt: new Date().toISOString(),
       };
       const userRef = doc(firestore, 'User', userCredential.user.uid);
@@ -113,23 +111,10 @@ export const AdminDashboard: React.FC = () => {
         ...(selectedRole === 'admin' && { admins: arrayUnion(newMemberEmail) }),
       });
 
-      // Step 5: Log in as the new user temporarily
-      const authInstance = getAuth();
-      await signInWithEmailAndPassword(authInstance, newMemberEmail, tempPassword);
+      // Step 5: Open "/" in a new tab
+      window.open('/', '_blank');
 
-      // Step 6: Open the new user page in another tab
-      const userPageURL = `/user-dashboard`; // Replace with the actual route
-      window.open(userPageURL, '_blank');
-
-      // Step 7: Re-authenticate the admin
-      const currentUser = auth.currentUser;
-      if (currentUser) {
-        await authInstance.signOut();
-        await signInWithEmailAndPassword(authInstance, currentUser.email!, 'admin-password');
-      }
-
-      // Show success message and temporary password
-      setGeneratedPassword(tempPassword);
+      // Clear input fields
       setNewMemberEmail('');
       setSelectedRole('member');
     } catch (err) {
@@ -146,7 +131,7 @@ export const AdminDashboard: React.FC = () => {
       <h1 className="text-2xl font-bold mb-4">Admin Dashboard - {organization.name}</h1>
 
       {/* Invite Section */}
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex items-center gap-2 mb-6">
         <input
           type="email"
           placeholder={`Invite new member (must use @${organization.domain})`}
@@ -170,19 +155,14 @@ export const AdminDashboard: React.FC = () => {
         </button>
       </div>
 
-      {/* Show Generated Password */}
-      {generatedPassword && (
-        <div className="bg-green-100 text-green-800 p-4 rounded-lg mb-4">
-          User invited successfully! Temporary Password: <strong>{generatedPassword}</strong>
-        </div>
-      )}
-
       {/* Organization Members Table */}
       <table className="w-full border-collapse border text-left">
         <thead>
           <tr>
             <th className="border-b p-2">Email</th>
             <th className="border-b p-2">Role</th>
+            <th className="border-b p-2">Plan</th>
+            <th className="border-b p-2">Temporary Password</th>
           </tr>
         </thead>
         <tbody>
@@ -190,6 +170,8 @@ export const AdminDashboard: React.FC = () => {
             <tr key={user.email}>
               <td className="p-2">{user.email}</td>
               <td className="p-2">{user.role}</td>
+              <td className="p-2">{user.plan}</td>
+              <td className="p-2">{user.temporaryPassword || 'N/A'}</td>
             </tr>
           ))}
         </tbody>
@@ -197,5 +179,4 @@ export const AdminDashboard: React.FC = () => {
     </div>
   );
 };
-
 
