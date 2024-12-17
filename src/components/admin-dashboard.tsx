@@ -16,7 +16,7 @@ import {
   sendEmailVerification,
   signInWithEmailAndPassword,
 } from 'firebase/auth';
-import { UserPlus, Upload } from 'lucide-react';
+import { UserPlus } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 // Generate a random password
@@ -82,7 +82,7 @@ export const AdminDashboard: React.FC = () => {
 
       const userProfile = {
         uid: userCredential.user.uid,
-        email: newMemberEmail,
+        email,
         role: selectedRole,
         organizationId: organization.id,
         createdAt: new Date().toISOString(),
@@ -134,11 +134,35 @@ export const AdminDashboard: React.FC = () => {
   };
 
   const handleBulkInvite = async () => {
-    for (const email of importedEmails) {
-      await inviteMember(email);
+    if (!organization) {
+      setError("No organization found. Cannot invite users.");
+      return;
     }
-    setImportedEmails([]);
-    alert('Bulk invite completed!');
+
+    if (importedEmails.length === 0) {
+      setError("No emails found in the uploaded file.");
+      return;
+    }
+
+    setError("");
+    setIsLoading(true);
+
+    try {
+      for (const email of importedEmails) {
+        if (email.endsWith(`@${organization.domain}`)) {
+          await inviteMember(email);
+        } else {
+          console.warn(`Skipping email ${email}: does not match organization domain.`);
+        }
+      }
+      alert("Bulk invite completed successfully!");
+      setImportedEmails([]);
+    } catch (err) {
+      console.error("Error during bulk invite:", err);
+      setError("An error occurred while inviting users. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -148,7 +172,12 @@ export const AdminDashboard: React.FC = () => {
       {/* File Import */}
       <div className="mb-6">
         <label className="block mb-2 font-medium">Import Emails (.csv, .xls, .xlsx):</label>
-        <input type="file" accept=".csv,.xls,.xlsx" onChange={handleFileUpload} />
+        <input
+          type="file"
+          accept=".csv,.xls,.xlsx"
+          onChange={handleFileUpload}
+          className="border p-2 rounded-lg"
+        />
         {importedEmails.length > 0 && (
           <div className="mt-2">
             <p className="text-sm">Imported {importedEmails.length} emails.</p>
@@ -193,6 +222,7 @@ export const AdminDashboard: React.FC = () => {
           <tr>
             <th className="border-b p-2">Email</th>
             <th className="border-b p-2">Role</th>
+            <th className="border-b p-2">Plan</th>
             <th className="border-b p-2">Temporary Password</th>
           </tr>
         </thead>
