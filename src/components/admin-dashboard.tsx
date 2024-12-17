@@ -74,16 +74,17 @@ export const AdminDashboard: React.FC = () => {
   }, [auth, firestore]);
 
   // Invite a new member
-  const inviteMember = async (email: string) => {
+  const inviteMember = async (email: string, adminPassword: string) => {
     try {
-            // Re-authenticate the admin to confirm credentials
+      // Re-authenticate the admin to confirm credentials
       const adminEmail = auth.currentUser?.email;
-        if (!adminEmail || !adminPassword) {
-           throw new Error('Admin email and password are required to proceed.');
-        }
-      
+      if (!adminEmail || !adminPassword) {
+        throw new Error('Admin email and password are required to proceed.');
+      }
+
       await signInWithEmailAndPassword(auth, adminEmail, adminPassword);
 
+      // Generate temporary password and invite the user
       const tempPassword = generateRandomPassword();
       const userCredential = await createUserWithEmailAndPassword(auth, email, tempPassword);
       await sendEmailVerification(userCredential.user);
@@ -105,7 +106,6 @@ export const AdminDashboard: React.FC = () => {
         },
         temporaryPassword: tempPassword, // Temporary field for invited users
       };
-
       const userRef = doc(firestore, 'User', userCredential.user.uid);
       await setDoc(userRef, userProfile);
 
@@ -114,14 +114,12 @@ export const AdminDashboard: React.FC = () => {
         members: arrayUnion(email),
         ...(selectedRole === 'admin' && { admins: arrayUnion(email) }),
       });
+
+      // Re-authenticate as the admin to ensure the session persists
+      await signInWithEmailAndPassword(auth, adminEmail, adminPassword);
     } catch (err) {
       console.error(`Failed to invite ${email}`, err);
-    };
-
-    await signInWithEmailAndPassword(auth, adminEmail, adminPassword);
-  } catch (err) {
-    console.error(`Failed to invite ${email}`, err);
-  }
+    }
   };
 
   // Handle file upload and email import
@@ -136,7 +134,6 @@ export const AdminDashboard: React.FC = () => {
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       const parsedData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-      // Extract valid emails
       const emails = parsedData
         .flat()
         .filter((cell: any) => typeof cell === 'string' && cell.includes('@'));
@@ -157,13 +154,19 @@ export const AdminDashboard: React.FC = () => {
       return;
     }
 
+    const adminPassword = prompt("Please enter your admin password to confirm:");
+    if (!adminPassword) {
+      setError("Admin password is required for bulk invite.");
+      return;
+    }
+
     setError("");
     setIsLoading(true);
 
     try {
       for (const email of importedEmails) {
         if (email.endsWith(`@${organization.domain}`)) {
-          await inviteMember(email);
+          await inviteMember(email, adminPassword);
         } else {
           console.warn(`Skipping email ${email}: does not match organization domain.`);
         }
@@ -202,31 +205,6 @@ export const AdminDashboard: React.FC = () => {
             </button>
           </div>
         )}
-      </div>
-
-      {/* Invite Section */}
-      <div className="flex items-center gap-2 mb-6">
-        <input
-          type="email"
-          placeholder={`Invite new member (must use @${organization?.domain})`}
-          value={newMemberEmail}
-          onChange={(e) => setNewMemberEmail(e.target.value)}
-          className="flex-1 border p-2 rounded-lg"
-        />
-        <select
-          value={selectedRole}
-          onChange={(e) => setSelectedRole(e.target.value as 'member' | 'admin')}
-          className="border p-2 rounded-lg"
-        >
-          <option value="member">Member</option>
-          <option value="admin">Admin</option>
-        </select>
-        <button
-          onClick={() => inviteMember(newMemberEmail)}
-          className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-1"
-        >
-          <UserPlus /> Invite
-        </button>
       </div>
 
       {/* Organization Members */}
