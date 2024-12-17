@@ -281,9 +281,9 @@ export default function App() {
                   </button>
                 )}
               </Tab.Panel>
-              <Tab.panel>
+              <Tab.Panel>
                 <AdminDashboard />
-              </Tab.panel>
+              </Tab.Panel>
             </Tab.Panels>
           </Tab.Group>
         </div>
