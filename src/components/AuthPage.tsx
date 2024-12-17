@@ -120,13 +120,20 @@ export const AuthPage: React.FC = () => {
 
     // Prepare user profile
     const userProfile: UserProfile = {
-      id: user.uid,
+      uid: user.uid,
       email: user.email || '',
+      createdAt: new Date().toISOString(),
       organizationId: orgResult.id,
       role: 'member', // Default role
-      createdAt: Date.now(),
-      status: 'active',
-      currentPlan: 'free_tier' // Default plan
+      subscription: {
+        plan: "Free",
+        status: "Active",
+        startedAt: new Date().toISOString(),
+        expiresAt: null,
+        subscriptionId: null,
+        stripeCustomerId: null,
+      },
+      accessCodeVerified: true, // Add a flag to indicate access code verification
     };
 
     // Store user profile in Firestore
