@@ -130,7 +130,7 @@ export const AuthPage: React.FC = () => {
     };
 
     // Store user profile in Firestore
-    const userRef = doc(firestore, 'users', user.uid);
+    const userRef = doc(firestore, 'User', user.uid);
     await setDoc(userRef, userProfile);
 
     return userProfile;
