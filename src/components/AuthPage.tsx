@@ -20,7 +20,9 @@ import {
   collection, 
   query, 
   where, 
-  getDocs 
+  getDocs,
+  updateDoc,
+  arrayUnion
 } from 'firebase/firestore';
 import privacy from '../assets/Privacy_Policy.pdf';
 import terms from '../assets/Terms_Of_Service_Business.pdf';
@@ -52,21 +54,19 @@ export const AuthPage: React.FC = () => {
   const auth = getAuth();
   const firestore = getFirestore();
 
+  // Single, universal access code
+  const GLOBAL_ACCESS_CODE = 'HEALTH2024';
+
   // Validate Access Code
   const validateAccessCode = (code: string): boolean => {
-    // Replace with your specific access code validation logic
-    const validCodes = ['HEALTH2024', 'MEDSTAFF123'];
-    return validCodes.includes(code);
+    return code === GLOBAL_ACCESS_CODE;
   };
 
-  // Create User in Firestore
-  const createUserInFirestore = async (
-    user: firebase.User, 
+  // Find or Create Organization
+  const findOrCreateOrganization = async (
     organizationName: string, 
     organizationDomain: string
-  ): Promise<UserProfile> => {
-    // Find or create organization
-    let organizationId;
+  ) => {
     const orgsRef = collection(firestore, 'organizations');
     const orgQuery = query(
       orgsRef, 
@@ -78,9 +78,33 @@ export const AuthPage: React.FC = () => {
     if (orgSnapshot.empty) {
       // Create new organization if not exists
       const newOrgRef = doc(orgsRef);
-      organizationId = newOrgRef.id;
+      return {
+        id: newOrgRef.id,
+        isNew: true,
+        ref: newOrgRef
+      };
+    } else {
+      // Use existing organization
+      const existingOrg = orgSnapshot.docs[0];
+      return {
+        id: existingOrg.id,
+        isNew: false,
+        ref: existingOrg.ref
+      };
+    }
+  };
 
-      await setDoc(newOrgRef, {
+  // Create User in Firestore
+  const createUserInFirestore = async (
+    user: firebase.User, 
+    organizationName: string, 
+    organizationDomain: string
+  ): Promise<UserProfile> => {
+    const orgResult = await findOrCreateOrganization(organizationName, organizationDomain);
+
+    if (orgResult.isNew) {
+      // Create new organization
+      await setDoc(orgResult.ref, {
         name: organizationName,
         domain: organizationDomain,
         members: [user.email],
@@ -88,15 +112,17 @@ export const AuthPage: React.FC = () => {
         createdAt: Date.now()
       });
     } else {
-      // Use existing organization
-      organizationId = orgSnapshot.docs[0].id;
+      // Update existing organization with new member
+      await updateDoc(orgResult.ref, {
+        members: arrayUnion(user.email)
+      });
     }
 
     // Prepare user profile
     const userProfile: UserProfile = {
       id: user.uid,
       email: user.email || '',
-      organizationId: organizationId,
+      organizationId: orgResult.id,
       role: 'member', // Default role
       createdAt: Date.now(),
       status: 'active',
@@ -135,11 +161,6 @@ export const AuthPage: React.FC = () => {
 
         if (!validateAccessCode(accessCode)) {
           throw new Error('Invalid access code');
-        }
-
-        // Validate email domain during signup
-        if (!email.endsWith(`@${organizationDomain}`)) {
-          throw new Error('Email must match the organization domain');
         }
 
         // Create user in Firebase Authentication
