@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { 
   Stethoscope, 
   Mail, 
   Lock, 
   AlertCircle, 
   KeyRound, 
-  CheckSquare, 
   Building 
 } from 'lucide-react';
 import { 
@@ -18,19 +17,24 @@ import {
   getFirestore, 
   doc, 
   setDoc, 
-  getDoc, 
-  collection 
+  collection, 
+  query, 
+  where, 
+  getDocs 
 } from 'firebase/firestore';
 import privacy from '../assets/Privacy_Policy.pdf';
 import terms from '../assets/Terms_Of_Service_Business.pdf';
 
-// Organization Interface
-interface Organization {
+// User Profile Interface
+interface UserProfile {
   id: string;
-  name: string;
-  domain: string;
-  members: string[];
-  admins: string[];
+  email: string;
+  organizationId: string;
+  role: 'member' | 'admin' | 'owner';
+  createdAt: number;
+  lastLogin?: number;
+  status: 'active' | 'invited' | 'suspended';
+  currentPlan?: string;
 }
 
 export const AuthPage: React.FC = () => {
@@ -48,6 +52,65 @@ export const AuthPage: React.FC = () => {
   const auth = getAuth();
   const firestore = getFirestore();
 
+  // Validate Access Code
+  const validateAccessCode = (code: string): boolean => {
+    // Replace with your specific access code validation logic
+    const validCodes = ['HEALTH2024', 'MEDSTAFF123'];
+    return validCodes.includes(code);
+  };
+
+  // Create User in Firestore
+  const createUserInFirestore = async (
+    user: firebase.User, 
+    organizationName: string, 
+    organizationDomain: string
+  ): Promise<UserProfile> => {
+    // Find or create organization
+    let organizationId;
+    const orgsRef = collection(firestore, 'organizations');
+    const orgQuery = query(
+      orgsRef, 
+      where('domain', '==', organizationDomain)
+    );
+
+    const orgSnapshot = await getDocs(orgQuery);
+
+    if (orgSnapshot.empty) {
+      // Create new organization if not exists
+      const newOrgRef = doc(orgsRef);
+      organizationId = newOrgRef.id;
+
+      await setDoc(newOrgRef, {
+        name: organizationName,
+        domain: organizationDomain,
+        members: [user.email],
+        admins: [user.email],
+        createdAt: Date.now()
+      });
+    } else {
+      // Use existing organization
+      organizationId = orgSnapshot.docs[0].id;
+    }
+
+    // Prepare user profile
+    const userProfile: UserProfile = {
+      id: user.uid,
+      email: user.email || '',
+      organizationId: organizationId,
+      role: 'member', // Default role
+      createdAt: Date.now(),
+      status: 'active',
+      currentPlan: 'free_tier' // Default plan
+    };
+
+    // Store user profile in Firestore
+    const userRef = doc(firestore, 'users', user.uid);
+    await setDoc(userRef, userProfile);
+
+    return userProfile;
+  };
+
+  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -55,123 +118,47 @@ export const AuthPage: React.FC = () => {
 
     try {
       if (isLogin) {
-        // Standard login with email verification check
+        // Login process
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         
-        // Optional: Check if email is verified
+        // Check email verification
         if (!userCredential.user.emailVerified) {
-          // Send verification email if not verified
           await sendEmailVerification(userCredential.user);
           throw new Error('Please verify your email. A verification link has been sent.');
         }
-
-        // Additional organization membership check
-        await checkOrganizationMembership(userCredential.user.email || '');
       } else {
         // Signup process
+        // Validate terms and access code
         if (!termsAccepted) {
           throw new Error('Please accept the Terms of Service and Privacy Policy');
         }
 
-        // Create user with email and password
+        if (!validateAccessCode(accessCode)) {
+          throw new Error('Invalid access code');
+        }
+
+        // Validate email domain during signup
+        if (!email.endsWith(`@${organizationDomain}`)) {
+          throw new Error('Email must match the organization domain');
+        }
+
+        // Create user in Firebase Authentication
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         
         // Send email verification
         await sendEmailVerification(userCredential.user);
 
-        // Create or join organization
-        if (isLogin === false) {
-          await createOrJoinOrganization(
-            userCredential.user.email || '', 
-            organizationName, 
-            organizationDomain
-          );
-        }
+        // Create user in Firestore
+        await createUserInFirestore(
+          userCredential.user, 
+          organizationName,
+          organizationDomain
+        );
       }
     } catch (error: any) {
       setError(error.message);
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Check if user belongs to an organization
-  const checkOrganizationMembership = async (email: string) => {
-    const orgsRef = collection(firestore, 'organizations');
-    
-    try {
-      // Query organizations where user is a member
-      const orgQuery = await getDocs(
-        query(orgsRef, where('members', 'array-contains', email))
-      );
-
-      if (orgQuery.empty) {
-        throw new Error('No organization membership found. Please contact your administrator.');
-      }
-
-      // Optionally, you could store the organization context here
-      const organizations = orgQuery.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Organization));
-
-      // TODO: Handle multiple organization memberships if needed
-    } catch (error) {
-      console.error('Organization membership check failed', error);
-      throw error;
-    }
-  };
-
-  // Create or join organization during signup
-  const createOrJoinOrganization = async (
-    email: string, 
-    orgName: string, 
-    orgDomain: string
-  ) => {
-    // Validate email domain
-    if (!email.endsWith(`@${orgDomain}`)) {
-      throw new Error('Email must match the organization domain');
-    }
-
-    const orgsRef = collection(firestore, 'organizations');
-    
-    try {
-      // Check if organization exists
-      const existingOrgQuery = await getDocs(
-        query(orgsRef, where('domain', '==', orgDomain))
-      );
-
-      let organizationId;
-
-      if (existingOrgQuery.empty) {
-        // Create new organization if not exists
-        const newOrgRef = doc(orgsRef);
-        const newOrg: Organization = {
-          id: newOrgRef.id,
-          name: orgName,
-          domain: orgDomain,
-          members: [email],
-          admins: [email]
-        };
-
-        await setDoc(newOrgRef, newOrg);
-        organizationId = newOrgRef.id;
-      } else {
-        // Join existing organization
-        const existingOrg = existingOrgQuery.docs[0];
-        const orgRef = doc(firestore, 'organizations', existingOrg.id);
-        
-        await updateDoc(orgRef, {
-          members: arrayUnion(email)
-        });
-
-        organizationId = existingOrg.id;
-      }
-
-      return organizationId;
-    } catch (error) {
-      console.error('Organization creation/join failed', error);
-      throw error;
     }
   };
 
