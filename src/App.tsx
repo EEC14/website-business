@@ -23,7 +23,7 @@ import { hasFeatureAccess } from "./utils/hasFeatureAccess";
 import { AccessDeniedPopup } from "./components/AccessDeniedPopup";
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
-import {AdminDashboard} from './components/admin-dashboard';
+import { AdminDashboard } from './components/admin-dashboard';
 
 type Message = {
   text: string;
@@ -209,6 +209,21 @@ export default function App() {
                 <div className="flex items-center justify-center gap-2">
                   <GraduationCap className="w-5 h-5" />
                   Learning Hub
+                </div>
+              </Tab>
+              <Tab
+                className={({ selected }) =>
+                  clsx(
+                    "w-full rounded-lg py-2.5 text-sm font-medium leading-5",
+                    "ring-white ring-opacity-60 ring-offset-2 ring-offset-blue-400 focus:outline-none focus:ring-2",
+                    selected
+                      ? "bg-white shadow text-blue-700"
+                      : "text-blue-500 hover:bg-white/[0.12] hover:text-blue-600"
+                  )
+                }
+              >
+                <div className="flex items-center justify-center gap-2">
+                  Admin dashboard
                 </div>
               </Tab>
             </Tab.List>
