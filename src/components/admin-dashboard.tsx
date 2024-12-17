@@ -116,7 +116,7 @@ export const AdminDashboard: React.FC = () => {
       });
     } catch (err) {
       console.error(`Failed to invite ${email}`, err);
-    }
+    };
 
     await signInWithEmailAndPassword(auth, adminEmail, adminPassword);
   } catch (err) {
