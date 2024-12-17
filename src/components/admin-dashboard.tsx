@@ -105,10 +105,18 @@ export const AdminDashboard: React.FC = () => {
         uid: userCredential.user.uid,
         email: newMemberEmail,
         role: selectedRole,
-        plan: 'Free',
         temporaryPassword: tempPassword,
         organizationId: organization.id,
         createdAt: new Date().toISOString(),
+        subscription: {
+        plan: "Free",
+        status: "Active",
+        startedAt: new Date().toISOString(),
+        expiresAt: null,
+        subscriptionId: null,
+        stripeCustomerId: null,
+      },
+      accessCodeVerified: true, // Add a flag to indicate access code verification
       };
       const userRef = doc(firestore, 'User', userCredential.user.uid);
       await setDoc(userRef, userProfile);
