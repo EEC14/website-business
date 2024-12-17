@@ -14,29 +14,21 @@ import {
   getAuth,
   createUserWithEmailAndPassword,
   sendEmailVerification,
+  signInWithEmailAndPassword,
 } from 'firebase/auth';
 import { UserPlus, Trash2 } from 'lucide-react';
 
-// Interfaces
-interface UserProfile {
-  email: string;
-  role: string;
-  plan: string;
-}
-
-interface Organization {
-  id: string;
-  name: string;
-  domain: string;
-  admins: string[];
-  members: string[];
-}
+// Generate a random password
+const generateRandomPassword = () => {
+  return Math.random().toString(36).slice(2, 10) + 'A1!';
+};
 
 export const AdminDashboard: React.FC = () => {
-  const [organization, setOrganization] = useState<Organization | null>(null);
-  const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
+  const [organization, setOrganization] = useState<any>(null);
+  const [userProfiles, setUserProfiles] = useState<any[]>([]);
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [selectedRole, setSelectedRole] = useState<'member' | 'admin'>('member');
+  const [generatedPassword, setGeneratedPassword] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,7 +47,7 @@ export const AdminDashboard: React.FC = () => {
         const querySnapshot = await getDocs(orgQuery);
 
         if (!querySnapshot.empty) {
-          const orgData = querySnapshot.docs[0].data() as Organization;
+          const orgData = querySnapshot.docs[0].data();
           setOrganization(orgData);
 
           // Fetch user profiles for members
@@ -65,11 +57,7 @@ export const AdminDashboard: React.FC = () => {
           );
           const userSnapshot = await getDocs(userQuery);
 
-          const profiles: UserProfile[] = userSnapshot.docs.map((doc) => ({
-            email: doc.data().email,
-            role: doc.data().role,
-            plan: doc.data().subscription?.plan || 'Free',
-          }));
+          const profiles = userSnapshot.docs.map((doc) => doc.data());
           setUserProfiles(profiles);
         } else {
           throw new Error('You are not authorized to access this dashboard.');
@@ -86,7 +74,7 @@ export const AdminDashboard: React.FC = () => {
     else setError('You must be logged in to access this page.');
   }, [auth, firestore]);
 
-  // Function to invite a new member
+  // Invite a new member and display the password
   const inviteMember = async () => {
     if (!organization) return;
 
@@ -94,46 +82,54 @@ export const AdminDashboard: React.FC = () => {
       setError('');
       const orgRef = doc(firestore, 'organizations', organization.id);
 
+      // Check if email matches organization domain
       if (!newMemberEmail.endsWith(`@${organization.domain}`)) {
         throw new Error(`Email must match organization domain: ${organization.domain}`);
       }
 
-      // Step 1: Create the user in Firebase Authentication
-      const tempPassword = 'TempPassword123!';
+      // Step 1: Generate temporary password
+      const tempPassword = generateRandomPassword();
+
+      // Step 2: Create user in Firebase Authentication
       const userCredential = await createUserWithEmailAndPassword(auth, newMemberEmail, tempPassword);
       await sendEmailVerification(userCredential.user);
 
-      // Step 2: Add user to Firestore User collection
+      // Step 3: Add user to Firestore
       const userProfile = {
         uid: userCredential.user.uid,
         email: newMemberEmail,
-        createdAt: new Date().toISOString(),
-        organizationId: organization.id,
         role: selectedRole,
+        organizationId: organization.id,
         subscription: { plan: 'Free', status: 'Active' },
         status: 'invited',
+        createdAt: new Date().toISOString(),
       };
       const userRef = doc(firestore, 'User', userCredential.user.uid);
       await setDoc(userRef, userProfile);
 
-      // Step 3: Update organization members and admins
+      // Step 4: Update organization members and admins
       await updateDoc(orgRef, {
         members: arrayUnion(newMemberEmail),
         ...(selectedRole === 'admin' && { admins: arrayUnion(newMemberEmail) }),
       });
 
-      // Update local state
-      setUserProfiles([...userProfiles, { email: newMemberEmail, role: selectedRole, plan: 'Free' }]);
-      setOrganization((prev) =>
-        prev
-          ? {
-              ...prev,
-              members: [...prev.members, newMemberEmail],
-              ...(selectedRole === 'admin' && { admins: [...prev.admins, newMemberEmail] }),
-            }
-          : null
-      );
+      // Step 5: Log in as the new user temporarily
+      const authInstance = getAuth();
+      await signInWithEmailAndPassword(authInstance, newMemberEmail, tempPassword);
 
+      // Step 6: Open the new user page in another tab
+      const userPageURL = `/user-dashboard`; // Replace with the actual route
+      window.open(userPageURL, '_blank');
+
+      // Step 7: Re-authenticate the admin
+      const currentUser = auth.currentUser;
+      if (currentUser) {
+        await authInstance.signOut();
+        await signInWithEmailAndPassword(authInstance, currentUser.email!, 'admin-password');
+      }
+
+      // Show success message and temporary password
+      setGeneratedPassword(tempPassword);
       setNewMemberEmail('');
       setSelectedRole('member');
     } catch (err) {
@@ -149,8 +145,8 @@ export const AdminDashboard: React.FC = () => {
     <div className="p-6 max-w-4xl mx-auto bg-white shadow-md rounded-lg">
       <h1 className="text-2xl font-bold mb-4">Admin Dashboard - {organization.name}</h1>
 
-      {/* Invite Member Section */}
-      <div className="flex items-center gap-2 mb-6">
+      {/* Invite Section */}
+      <div className="flex items-center gap-2 mb-4">
         <input
           type="email"
           placeholder={`Invite new member (must use @${organization.domain})`}
@@ -174,34 +170,26 @@ export const AdminDashboard: React.FC = () => {
         </button>
       </div>
 
-      {/* Members Table */}
+      {/* Show Generated Password */}
+      {generatedPassword && (
+        <div className="bg-green-100 text-green-800 p-4 rounded-lg mb-4">
+          User invited successfully! Temporary Password: <strong>{generatedPassword}</strong>
+        </div>
+      )}
+
+      {/* Organization Members Table */}
       <table className="w-full border-collapse border text-left">
         <thead>
           <tr>
             <th className="border-b p-2">Email</th>
             <th className="border-b p-2">Role</th>
-            <th className="border-b p-2">Plan</th>
-            <th className="border-b p-2">Actions</th>
           </tr>
         </thead>
         <tbody>
-          {userProfiles.map((profile) => (
-            <tr key={profile.email} className="hover:bg-gray-50">
-              <td className="p-2">{profile.email}</td>
-              <td className="p-2">{profile.role}</td>
-              <td className="p-2">{profile.plan}</td>
-              <td className="p-2">
-                {organization.admins.includes(profile.email) ? (
-                  <span className="text-gray-400">Cannot Remove Admin</span>
-                ) : (
-                  <button
-                    onClick={() => console.log('Remove member:', profile.email)}
-                    className="text-red-500 hover:text-red-600"
-                  >
-                    <Trash2 className="inline-block mr-1" /> Remove
-                  </button>
-                )}
-              </td>
+          {userProfiles.map((user) => (
+            <tr key={user.email}>
+              <td className="p-2">{user.email}</td>
+              <td className="p-2">{user.role}</td>
             </tr>
           ))}
         </tbody>
