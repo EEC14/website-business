@@ -23,6 +23,7 @@ import { hasFeatureAccess } from "./utils/hasFeatureAccess";
 import { AccessDeniedPopup } from "./components/AccessDeniedPopup";
 import Terms from './pages/Terms';
 import Privacy from './pages/Privacy';
+import {AdminDashboard} from './components/admin-dashboard';
 
 type Message = {
   text: string;
@@ -265,6 +266,9 @@ export default function App() {
                   </button>
                 )}
               </Tab.Panel>
+              <Tab.panel>
+                <AdminDashboard />
+              </Tab.panel>
             </Tab.Panels>
           </Tab.Group>
         </div>
