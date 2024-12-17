@@ -14,6 +14,7 @@ import {
   getAuth,
   createUserWithEmailAndPassword,
   sendEmailVerification,
+  signInWithEmailAndPassword,
 } from 'firebase/auth';
 import { UserPlus } from 'lucide-react';
 
@@ -85,14 +86,21 @@ export const AdminDashboard: React.FC = () => {
         throw new Error(`Email must match organization domain: ${organization.domain}`);
       }
 
-      // Step 1: Generate temporary password
+      // Step 1: Save the current admin session
+      const adminEmail = auth.currentUser?.email;
+      const adminPassword = prompt('Please enter your password to confirm:');
+      if (!adminEmail || !adminPassword) {
+        throw new Error('Admin password is required to proceed.');
+      }
+
+      // Step 2: Generate temporary password
       const tempPassword = generateRandomPassword();
 
-      // Step 2: Create user in Firebase Authentication
+      // Step 3: Create user in Firebase Authentication
       const userCredential = await createUserWithEmailAndPassword(auth, newMemberEmail, tempPassword);
       await sendEmailVerification(userCredential.user);
 
-      // Step 3: Add user to Firestore
+      // Step 4: Add user to Firestore
       const userProfile = {
         uid: userCredential.user.uid,
         email: newMemberEmail,
@@ -105,13 +113,16 @@ export const AdminDashboard: React.FC = () => {
       const userRef = doc(firestore, 'User', userCredential.user.uid);
       await setDoc(userRef, userProfile);
 
-      // Step 4: Update organization members and admins
+      // Step 5: Update organization members and admins
       await updateDoc(orgRef, {
         members: arrayUnion(newMemberEmail),
         ...(selectedRole === 'admin' && { admins: arrayUnion(newMemberEmail) }),
       });
 
-      // Step 5: Open "/" in a new tab
+      // Step 6: Re-authenticate as the admin
+      await signInWithEmailAndPassword(auth, adminEmail, adminPassword);
+
+      // Step 7: Open "/" in a new tab
       window.open('/', '_blank');
 
       // Clear input fields
