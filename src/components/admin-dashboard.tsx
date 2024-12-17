@@ -16,7 +16,8 @@ import {
   sendEmailVerification,
   signInWithEmailAndPassword,
 } from 'firebase/auth';
-import { UserPlus } from 'lucide-react';
+import { UserPlus, Upload } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 // Generate a random password
 const generateRandomPassword = () => {
@@ -30,6 +31,7 @@ export const AdminDashboard: React.FC = () => {
   const [selectedRole, setSelectedRole] = useState<'member' | 'admin'>('member');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [importedEmails, setImportedEmails] = useState<string[]>([]);
 
   const auth = getAuth();
   const firestore = getFirestore();
@@ -40,7 +42,6 @@ export const AdminDashboard: React.FC = () => {
       try {
         setIsLoading(true);
 
-        // Fetch the organization
         const orgRef = collection(firestore, 'organizations');
         const orgQuery = query(orgRef, where('admins', 'array-contains', userEmail));
         const querySnapshot = await getDocs(orgQuery);
@@ -49,7 +50,6 @@ export const AdminDashboard: React.FC = () => {
           const orgData = querySnapshot.docs[0].data();
           setOrganization(orgData);
 
-          // Fetch user profiles for members
           const userQuery = query(
             collection(firestore, 'User'),
             where('email', 'in', orgData.members)
@@ -74,88 +74,99 @@ export const AdminDashboard: React.FC = () => {
   }, [auth, firestore]);
 
   // Invite a new member
-const inviteMember = async () => {
-  if (!organization) return;
+  const inviteMember = async (email: string) => {
+    try {
+      const tempPassword = generateRandomPassword();
+      const userCredential = await createUserWithEmailAndPassword(auth, email, tempPassword);
+      await sendEmailVerification(userCredential.user);
 
-  try {
-    setError('');
-    const orgRef = doc(firestore, 'organizations', organization.id);
+      const userProfile = {
+        uid: userCredential.user.uid,
+        email: newMemberEmail,
+        role: selectedRole,
+        organizationId: organization.id,
+        createdAt: new Date().toISOString(),
+        status: 'invited',
+        subscription: {
+          plan: 'Free',
+          status: 'Active',
+          startedAt: new Date().toISOString(),
+          expiresAt: null,
+          subscriptionId: null,
+          stripeCustomerId: null,
+        },
+        temporaryPassword: tempPassword, // Temporary field for invited users
+      };
 
-    // Step 1: Validate email domain
-    if (!newMemberEmail.endsWith(`@${organization.domain}`)) {
-      throw new Error(`Email must match organization domain: ${organization.domain}`);
+      const userRef = doc(firestore, 'User', userCredential.user.uid);
+      await setDoc(userRef, userProfile);
+
+      const orgRef = doc(firestore, 'organizations', organization.id);
+      await updateDoc(orgRef, {
+        members: arrayUnion(email),
+        ...(selectedRole === 'admin' && { admins: arrayUnion(email) }),
+      });
+    } catch (err) {
+      console.error(`Failed to invite ${email}`, err);
     }
+  };
 
-    // Step 2: Ask for admin credentials to confirm the operation
-    const adminEmail = auth.currentUser?.email;
-    const adminPassword = prompt('Please enter your password to confirm:');
-    if (!adminEmail || !adminPassword) {
-      throw new Error('Admin password is required to proceed.');
-    }
+  // Handle file upload and email import
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    // Step 3: Generate a temporary password
-    const tempPassword = generateRandomPassword();
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const data = new Uint8Array(event.target?.result as ArrayBuffer);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const parsedData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-    // Step 4: Temporarily log out admin to create the invited user
-    await signInWithEmailAndPassword(auth, adminEmail, adminPassword);
+      // Extract valid emails
+      const emails = parsedData
+        .flat()
+        .filter((cell: any) => typeof cell === 'string' && cell.includes('@'));
 
-    // Step 5: Create user in Firebase Authentication
-    const userCredential = await createUserWithEmailAndPassword(auth, newMemberEmail, tempPassword);
-    await sendEmailVerification(userCredential.user);
-
-    // Step 6: Create a user profile with the matching structure
-    const userProfile = {
-      uid: userCredential.user.uid,
-      email: newMemberEmail,
-      role: selectedRole,
-      organizationId: organization.id,
-      createdAt: new Date().toISOString(),
-      status: 'invited',
-      subscription: {
-        plan: 'Free',
-        status: 'Active',
-        startedAt: new Date().toISOString(),
-        expiresAt: null,
-        subscriptionId: null,
-        stripeCustomerId: null,
-      },
-      temporaryPassword: tempPassword, // Temporary field for invited users
+      setImportedEmails(emails);
     };
+    reader.readAsArrayBuffer(file);
+  };
 
-    // Step 7: Save to Firestore
-    const userRef = doc(firestore, 'User', userCredential.user.uid);
-    await setDoc(userRef, userProfile);
-
-    // Step 8: Update organization members
-    await updateDoc(orgRef, {
-      members: arrayUnion(newMemberEmail),
-      ...(selectedRole === 'admin' && { admins: arrayUnion(newMemberEmail) }),
-    });
-
-    // Step 9: Re-authenticate as admin to maintain session
-    await signInWithEmailAndPassword(auth, adminEmail, adminPassword);
-
-    // Step 10: Success: Clear input fields
-    setNewMemberEmail('');
-    setSelectedRole('member');
-  } catch (err) {
-    setError(err instanceof Error ? err.message : 'Failed to invite member.');
-  }
-};
-
-  if (isLoading) return <div>Loading...</div>;
-  if (error) return <div>{error}</div>;
-  if (!organization) return <div>No organization found.</div>;
+  const handleBulkInvite = async () => {
+    for (const email of importedEmails) {
+      await inviteMember(email);
+    }
+    setImportedEmails([]);
+    alert('Bulk invite completed!');
+  };
 
   return (
     <div className="p-6 max-w-4xl mx-auto bg-white shadow-md rounded-lg">
-      <h1 className="text-2xl font-bold mb-4">Admin Dashboard - {organization.name}</h1>
+      <h1 className="text-2xl font-bold mb-4">Admin Dashboard - {organization?.name}</h1>
+
+      {/* File Import */}
+      <div className="mb-6">
+        <label className="block mb-2 font-medium">Import Emails (.csv, .xls, .xlsx):</label>
+        <input type="file" accept=".csv,.xls,.xlsx" onChange={handleFileUpload} />
+        {importedEmails.length > 0 && (
+          <div className="mt-2">
+            <p className="text-sm">Imported {importedEmails.length} emails.</p>
+            <button
+              onClick={handleBulkInvite}
+              className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg mt-2"
+            >
+              Bulk Invite
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Invite Section */}
       <div className="flex items-center gap-2 mb-6">
         <input
           type="email"
-          placeholder={`Invite new member (must use @${organization.domain})`}
+          placeholder={`Invite new member (must use @${organization?.domain})`}
           value={newMemberEmail}
           onChange={(e) => setNewMemberEmail(e.target.value)}
           className="flex-1 border p-2 rounded-lg"
@@ -169,20 +180,19 @@ const inviteMember = async () => {
           <option value="admin">Admin</option>
         </select>
         <button
-          onClick={inviteMember}
+          onClick={() => inviteMember(newMemberEmail)}
           className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-1"
         >
           <UserPlus /> Invite
         </button>
       </div>
 
-      {/* Organization Members Table */}
+      {/* Organization Members */}
       <table className="w-full border-collapse border text-left">
         <thead>
           <tr>
             <th className="border-b p-2">Email</th>
             <th className="border-b p-2">Role</th>
-            <th className="border-b p-2">Plan</th>
             <th className="border-b p-2">Temporary Password</th>
           </tr>
         </thead>
@@ -200,4 +210,3 @@ const inviteMember = async () => {
     </div>
   );
 };
-
