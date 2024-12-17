@@ -20,7 +20,7 @@ interface Organization {
   members: string[];
 }
 
-const AdminDashboard: React.FC = () => {
+export const AdminDashboard: React.FC = () => {
   const [organization, setOrganization] = useState<Organization | null>(null);
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [isLoading, setIsLoading] = useState(true);
