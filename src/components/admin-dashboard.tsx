@@ -76,6 +76,14 @@ export const AdminDashboard: React.FC = () => {
   // Invite a new member
   const inviteMember = async (email: string) => {
     try {
+            // Re-authenticate the admin to confirm credentials
+      const adminEmail = auth.currentUser?.email;
+        if (!adminEmail || !adminPassword) {
+           throw new Error('Admin email and password are required to proceed.');
+        }
+      
+      await signInWithEmailAndPassword(auth, adminEmail, adminPassword);
+
       const tempPassword = generateRandomPassword();
       const userCredential = await createUserWithEmailAndPassword(auth, email, tempPassword);
       await sendEmailVerification(userCredential.user);
@@ -109,6 +117,11 @@ export const AdminDashboard: React.FC = () => {
     } catch (err) {
       console.error(`Failed to invite ${email}`, err);
     }
+
+    await signInWithEmailAndPassword(auth, adminEmail, adminPassword);
+  } catch (err) {
+    console.error(`Failed to invite ${email}`, err);
+  }
   };
 
   // Handle file upload and email import
