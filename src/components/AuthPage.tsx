@@ -1,17 +1,52 @@
-import React, { useState } from 'react';
-import { Stethoscope, Mail, Lock, AlertCircle, KeyRound, CheckSquare } from 'lucide-react';
-import { createUser, signIn } from '../services/firebase';
+import React, { useState, useEffect } from 'react';
+import { 
+  Stethoscope, 
+  Mail, 
+  Lock, 
+  AlertCircle, 
+  KeyRound, 
+  CheckSquare, 
+  Building 
+} from 'lucide-react';
+import { 
+  getAuth, 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword,
+  sendEmailVerification
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  doc, 
+  setDoc, 
+  getDoc, 
+  collection 
+} from 'firebase/firestore';
 import privacy from '../assets/Privacy_Policy.pdf';
 import terms from '../assets/Terms_Of_Service_Business.pdf';
+
+// Organization Interface
+interface Organization {
+  id: string;
+  name: string;
+  domain: string;
+  members: string[];
+  admins: string[];
+}
 
 export const AuthPage: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [accessCode, setAccessCode] = useState('');
+  const [organizationName, setOrganizationName] = useState('');
+  const [organizationDomain, setOrganizationDomain] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Firebase instances
+  const auth = getAuth();
+  const firestore = getFirestore();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,19 +55,123 @@ export const AuthPage: React.FC = () => {
 
     try {
       if (isLogin) {
-        await signIn(email, password);
+        // Standard login with email verification check
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        
+        // Optional: Check if email is verified
+        if (!userCredential.user.emailVerified) {
+          // Send verification email if not verified
+          await sendEmailVerification(userCredential.user);
+          throw new Error('Please verify your email. A verification link has been sent.');
+        }
+
+        // Additional organization membership check
+        await checkOrganizationMembership(userCredential.user.email || '');
       } else {
-        // Check terms acceptance only during signup
+        // Signup process
         if (!termsAccepted) {
           throw new Error('Please accept the Terms of Service and Privacy Policy');
         }
-        // Pass access code for signup
-        await createUser(email, password, accessCode);
+
+        // Create user with email and password
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        
+        // Send email verification
+        await sendEmailVerification(userCredential.user);
+
+        // Create or join organization
+        if (isLogin === false) {
+          await createOrJoinOrganization(
+            userCredential.user.email || '', 
+            organizationName, 
+            organizationDomain
+          );
+        }
       }
     } catch (error: any) {
       setError(error.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Check if user belongs to an organization
+  const checkOrganizationMembership = async (email: string) => {
+    const orgsRef = collection(firestore, 'organizations');
+    
+    try {
+      // Query organizations where user is a member
+      const orgQuery = await getDocs(
+        query(orgsRef, where('members', 'array-contains', email))
+      );
+
+      if (orgQuery.empty) {
+        throw new Error('No organization membership found. Please contact your administrator.');
+      }
+
+      // Optionally, you could store the organization context here
+      const organizations = orgQuery.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      } as Organization));
+
+      // TODO: Handle multiple organization memberships if needed
+    } catch (error) {
+      console.error('Organization membership check failed', error);
+      throw error;
+    }
+  };
+
+  // Create or join organization during signup
+  const createOrJoinOrganization = async (
+    email: string, 
+    orgName: string, 
+    orgDomain: string
+  ) => {
+    // Validate email domain
+    if (!email.endsWith(`@${orgDomain}`)) {
+      throw new Error('Email must match the organization domain');
+    }
+
+    const orgsRef = collection(firestore, 'organizations');
+    
+    try {
+      // Check if organization exists
+      const existingOrgQuery = await getDocs(
+        query(orgsRef, where('domain', '==', orgDomain))
+      );
+
+      let organizationId;
+
+      if (existingOrgQuery.empty) {
+        // Create new organization if not exists
+        const newOrgRef = doc(orgsRef);
+        const newOrg: Organization = {
+          id: newOrgRef.id,
+          name: orgName,
+          domain: orgDomain,
+          members: [email],
+          admins: [email]
+        };
+
+        await setDoc(newOrgRef, newOrg);
+        organizationId = newOrgRef.id;
+      } else {
+        // Join existing organization
+        const existingOrg = existingOrgQuery.docs[0];
+        const orgRef = doc(firestore, 'organizations', existingOrg.id);
+        
+        await updateDoc(orgRef, {
+          members: arrayUnion(email)
+        });
+
+        organizationId = existingOrg.id;
+      }
+
+      return organizationId;
+    } catch (error) {
+      console.error('Organization creation/join failed', error);
+      throw error;
     }
   };
 
@@ -96,6 +235,41 @@ export const AuthPage: React.FC = () => {
 
           {!isLogin && (
             <>
+              <div>
+                <label htmlFor="organizationName" className="block text-sm font-medium text-gray-700">
+                  Organization Name
+                </label>
+                <div className="mt-1 relative">
+                  <input
+                    id="organizationName"
+                    type="text"
+                    required
+                    value={organizationName}
+                    onChange={(e) => setOrganizationName(e.target.value)}
+                    className="appearance-none block w-full px-3 py-2 pl-10 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <Building className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" />
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="organizationDomain" className="block text-sm font-medium text-gray-700">
+                  Organization Domain
+                </label>
+                <div className="mt-1 relative">
+                  <input
+                    id="organizationDomain"
+                    type="text"
+                    required
+                    value={organizationDomain}
+                    onChange={(e) => setOrganizationDomain(e.target.value)}
+                    placeholder="example.com"
+                    className="appearance-none block w-full px-3 py-2 pl-10 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  <Building className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" />
+                </div>
+              </div>
+
               <div>
                 <label htmlFor="accessCode" className="block text-sm font-medium text-gray-700">
                   Access Code
