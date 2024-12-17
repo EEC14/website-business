@@ -11,7 +11,8 @@ import {
   getAuth, 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword,
-  sendEmailVerification
+  sendEmailVerification,
+  sendPasswordResetEmail,
 } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -49,61 +50,33 @@ export const AuthPage: React.FC = () => {
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resetEmailSent, setResetEmailSent] = useState(false);
 
-  // Firebase instances
   const auth = getAuth();
   const firestore = getFirestore();
 
-  // Single, universal access code
   const GLOBAL_ACCESS_CODE = 'HEALTH2024';
 
-  // Validate Access Code
-  const validateAccessCode = (code: string): boolean => {
-    return code === GLOBAL_ACCESS_CODE;
-  };
+  const validateAccessCode = (code: string): boolean => code === GLOBAL_ACCESS_CODE;
 
-  // Find or Create Organization
-  const findOrCreateOrganization = async (
-    organizationName: string, 
-    organizationDomain: string
-  ) => {
+  const findOrCreateOrganization = async (organizationName: string, organizationDomain: string) => {
     const orgsRef = collection(firestore, 'organizations');
-    const orgQuery = query(
-      orgsRef, 
-      where('domain', '==', organizationDomain)
-    );
-
+    const orgQuery = query(orgsRef, where('domain', '==', organizationDomain));
     const orgSnapshot = await getDocs(orgQuery);
 
     if (orgSnapshot.empty) {
-      // Create new organization if not exists
       const newOrgRef = doc(orgsRef);
-      return {
-        id: newOrgRef.id,
-        isNew: true,
-        ref: newOrgRef
-      };
+      return { id: newOrgRef.id, isNew: true, ref: newOrgRef };
     } else {
-      // Use existing organization
       const existingOrg = orgSnapshot.docs[0];
-      return {
-        id: existingOrg.id,
-        isNew: false,
-        ref: existingOrg.ref
-      };
+      return { id: existingOrg.id, isNew: false, ref: existingOrg.ref };
     }
   };
 
-  // Create User in Firestore
-  const createUserInFirestore = async (
-    user: firebase.User, 
-    organizationName: string, 
-    organizationDomain: string
-  ): Promise<UserProfile> => {
+  const createUserInFirestore = async (user: firebase.User, organizationName: string, organizationDomain: string) => {
     const orgResult = await findOrCreateOrganization(organizationName, organizationDomain);
 
     if (orgResult.isNew) {
-      // Create new organization
       await setDoc(orgResult.ref, {
         name: organizationName,
         domain: organizationDomain,
@@ -112,19 +85,15 @@ export const AuthPage: React.FC = () => {
         createdAt: Date.now()
       });
     } else {
-      // Update existing organization with new member
-      await updateDoc(orgResult.ref, {
-        members: arrayUnion(user.email)
-      });
+      await updateDoc(orgResult.ref, { members: arrayUnion(user.email) });
     }
 
-    // Prepare user profile
-    const userProfile: UserProfile = {
+    const userProfile = {
       uid: user.uid,
       email: user.email || '',
       createdAt: new Date().toISOString(),
       organizationId: orgResult.id,
-      role: 'member', // Default role
+      role: 'member',
       subscription: {
         plan: "Free",
         status: "Active",
@@ -133,55 +102,33 @@ export const AuthPage: React.FC = () => {
         subscriptionId: null,
         stripeCustomerId: null,
       },
-      accessCodeVerified: true, // Add a flag to indicate access code verification
+      accessCodeVerified: true,
     };
 
-    // Store user profile in Firestore
     const userRef = doc(firestore, 'User', user.uid);
     await setDoc(userRef, userProfile);
-
     return userProfile;
   };
 
-  // Handle form submission
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
-
     try {
       if (isLogin) {
-        // Login process
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        
-        // Check email verification
         if (!userCredential.user.emailVerified) {
           await sendEmailVerification(userCredential.user);
           throw new Error('Please verify your email. A verification link has been sent.');
         }
       } else {
-        // Signup process
-        // Validate terms and access code
-        if (!termsAccepted) {
-          throw new Error('Please accept the Terms of Service and Privacy Policy');
-        }
+        if (!termsAccepted) throw new Error('Please accept the Terms of Service and Privacy Policy');
+        if (!validateAccessCode(accessCode)) throw new Error('Invalid access code');
 
-        if (!validateAccessCode(accessCode)) {
-          throw new Error('Invalid access code');
-        }
-
-        // Create user in Firebase Authentication
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        
-        // Send email verification
         await sendEmailVerification(userCredential.user);
 
-        // Create user in Firestore
-        await createUserInFirestore(
-          userCredential.user, 
-          organizationName,
-          organizationDomain
-        );
+        await createUserInFirestore(userCredential.user, organizationName, organizationDomain);
       }
     } catch (error: any) {
       setError(error.message);
@@ -190,155 +137,73 @@ export const AuthPage: React.FC = () => {
     }
   };
 
+  const sendPasswordReset = async () => {
+    if (!email) {
+      setError('Please enter your email to reset the password.');
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setResetEmailSent(true);
+      setError('');
+    } catch (error: any) {
+      setError('Failed to send reset email. Please check the email address.');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex flex-col items-center justify-center p-4">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
-          <div className="flex items-center justify-center gap-2 mb-6">
-            <Stethoscope className="w-8 h-8 text-blue-500" />
-            <h1 className="text-3xl font-bold text-gray-900">HealthChat</h1>
-          </div>
-          <h2 className="text-2xl font-semibold text-gray-900">
-            Medical Staff Portal
-          </h2>
+          <Stethoscope className="w-8 h-8 text-blue-500" />
+          <h1 className="text-3xl font-bold text-gray-900">HealthChat</h1>
           <p className="mt-2 text-gray-600">
             {isLogin ? 'Sign in to your account' : 'Create your account'}
           </p>
         </div>
 
-        {error && (
-          <div className="bg-red-50 p-4 rounded-lg flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-1" />
-            <p className="text-sm text-red-700">{error}</p>
-          </div>
-        )}
+        {error && <div className="bg-red-50 p-4 rounded-lg text-red-700">{error}</div>}
+        {resetEmailSent && <div className="bg-green-50 p-4 rounded-lg text-green-700">Password reset email sent! Please check your inbox.</div>}
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-              Email address
-            </label>
-            <div className="mt-1 relative">
-              <input
-                id="email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="appearance-none block w-full px-3 py-2 pl-10 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              />
-              <Mail className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" />
-            </div>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email address</label>
+            <input
+              id="email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg"
+            />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-              Password
-            </label>
-            <div className="mt-1 relative">
-              <input
-                id="password"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="appearance-none block w-full px-3 py-2 pl-10 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              />
-              <Lock className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" />
-            </div>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700">Password</label>
+            <input
+              id="password"
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-3 py-2 border rounded-lg"
+            />
           </div>
 
-          {!isLogin && (
-            <>
-              <div>
-                <label htmlFor="organizationName" className="block text-sm font-medium text-gray-700">
-                  Organization Name
-                </label>
-                <div className="mt-1 relative">
-                  <input
-                    id="organizationName"
-                    type="text"
-                    required
-                    value={organizationName}
-                    onChange={(e) => setOrganizationName(e.target.value)}
-                    className="appearance-none block w-full px-3 py-2 pl-10 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  />
-                  <Building className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" />
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="organizationDomain" className="block text-sm font-medium text-gray-700">
-                  Organization Domain
-                </label>
-                <div className="mt-1 relative">
-                  <input
-                    id="organizationDomain"
-                    type="text"
-                    required
-                    value={organizationDomain}
-                    onChange={(e) => setOrganizationDomain(e.target.value)}
-                    placeholder="example.com"
-                    className="appearance-none block w-full px-3 py-2 pl-10 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  />
-                  <Building className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" />
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="accessCode" className="block text-sm font-medium text-gray-700">
-                  Access Code
-                </label>
-                <div className="mt-1 relative">
-                  <input
-                    id="accessCode"
-                    type="text"
-                    required
-                    value={accessCode}
-                    onChange={(e) => setAccessCode(e.target.value)}
-                    className="appearance-none block w-full px-3 py-2 pl-10 border border-gray-300 rounded-lg shadow-sm placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  />
-                  <KeyRound className="w-5 h-5 text-gray-400 absolute left-3 top-2.5" />
-                </div>
-              </div>
-
-              <div className="flex items-center">
-                <input
-                  id="terms"
-                  type="checkbox"
-                  required
-                  checked={termsAccepted}
-                  onChange={() => setTermsAccepted(!termsAccepted)}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                />
-                <label htmlFor="terms" className="ml-2 block text-sm text-gray-900">
-                  I accept the{' '}
-                  <a href={terms} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800">
-                    Terms of Service
-                  </a>{' '}
-                  and{' '}
-                  <a href={privacy} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-800">
-                    Privacy Policy
-                  </a>
-                </label>
-              </div>
-            </>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+          <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-2 rounded-lg">
             {loading ? 'Please wait...' : isLogin ? 'Sign In' : 'Create Account'}
           </button>
 
+          {isLogin && (
+            <div className="text-center mt-2">
+              <button type="button" onClick={sendPasswordReset} className="text-sm text-blue-600">
+                Forgot Password?
+              </button>
+            </div>
+          )}
+
           <div className="text-center">
-            <button
-              type="button"
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-sm text-blue-600 hover:text-blue-500"
-            >
+            <button type="button" onClick={() => setIsLogin(!isLogin)} className="text-sm text-blue-600">
               {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
             </button>
           </div>
