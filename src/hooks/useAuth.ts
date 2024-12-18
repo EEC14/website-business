@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react';
-import { User } from 'firebase/auth';
+import { getAuth, User } from 'firebase/auth';
 import { 
   collection, 
   query, 
   where, 
   getDocs,
   getDoc,
-  doc
+  doc,
+  getFirestore
 } from 'firebase/firestore';
-import { auth, db } from '../services/firebase'; // Assuming this is your Firebase config
+
+auth = getAuth();
+db = getFirestore();
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
