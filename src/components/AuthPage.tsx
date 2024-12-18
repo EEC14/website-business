@@ -37,7 +37,7 @@ export const AuthPage: React.FC = () => {
     console.log('Submit triggered');
     setError('');
     setLoading(true);
-
+  
     try {
       if (isLogin) {
         console.log('Attempting login');
@@ -48,31 +48,59 @@ export const AuthPage: React.FC = () => {
         if (!termsAccepted) {
           throw new Error('Please accept the Terms of Service and Privacy Policy');
         }
-
+  
         const isAdmin = accessCode.toUpperCase().trim() === ADMIN_ACCESS_CODE;
         const isStaff = accessCode.toUpperCase().trim() === STAFF_ACCESS_CODE;
         
         if (!isAdmin && !isStaff) {
           throw new Error('Invalid access code');
         }
-
+  
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         console.log('User account created');
-
+  
         try {
           await sendEmailVerification(userCredential.user);
           console.log('Verification email sent');
         } catch (verificationError) {
           console.error('Error sending verification:', verificationError);
         }
-
+  
         const user = userCredential.user;
         
         if (isAdmin) {
+          console.log('Setting up admin account and organization');
+          
+          // Create organization first
+          const orgRef = doc(collection(firestore, 'organizations'));
+          const orgDomain = email.split('@')[1];
+          
+          await setDoc(orgRef, {
+            name: orgDomain.split('.')[0], // Use domain name as org name initially
+            domain: orgDomain,
+            members: [email],
+            admins: [email],
+            createdAt: new Date().toISOString(),
+            subscription: {
+              plan: "Free",
+              status: "Active",
+              seats: 1,
+              usedSeats: 1,
+              startedAt: new Date().toISOString(),
+              expiresAt: null,
+              subscriptionId: null,
+              stripeCustomerId: null,
+            }
+          });
+          
+          console.log('Organization created, creating admin user document');
+  
+          // Create admin user with organization reference
           await setDoc(doc(firestore, 'User', user.uid), {
             uid: user.uid,
             email: user.email,
             role: 'admin',
+            organizationId: orgRef.id,
             createdAt: new Date().toISOString(),
             subscription: {
               plan: "Free",
@@ -84,8 +112,10 @@ export const AuthPage: React.FC = () => {
             },
             accessCodeVerified: true,
           });
-          console.log('Admin user document created');
+          
+          console.log('Admin setup completed');
         } else {
+          // Regular user signup
           await setDoc(doc(firestore, 'User', user.uid), {
             uid: user.uid,
             email: user.email,
@@ -112,8 +142,6 @@ export const AuthPage: React.FC = () => {
         setError('Please enter a valid email address.');
       } else if (error.code === 'auth/weak-password') {
         setError('Password should be at least 6 characters long.');
-      } else if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-        setError('Invalid email or password.');
       } else {
         setError(error.message);
       }

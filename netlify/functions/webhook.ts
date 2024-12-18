@@ -32,65 +32,54 @@ export const handler: Handler = async (event) => {
               expand: ["line_items"],
             }
           );
-
+      
           const customerId = session.customer;
           const userEmail = session.customer_details?.email;
           const planId = session.line_items?.data[0]?.price?.id;
           const quantity = session.line_items?.data[0]?.quantity || 1;
-
+      
           if (!userEmail || !planId || !customerId) {
             console.log("Missing required fields:", { userEmail, planId, customerId });
             break;
           }
-
+      
           const plan = getPlanNameByPriceId(planId);
           if (!plan) {
             console.log("Invalid plan ID:", planId);
             break;
           }
-
-          console.log("Processing subscription:", {
-            plan,
-            userEmail,
-            quantity,
-            customerId
-          });
-
+      
           // Find organization where user is admin
           const orgRef = collection(dbAdmin, 'organizations');
           const orgQuery = query(orgRef, where('admins', 'array-contains', userEmail));
           const orgSnapshot = await getDocs(orgQuery);
-
+      
           if (!orgSnapshot.empty) {
             const orgDoc = orgSnapshot.docs[0];
             const currentMembers = (await getDoc(orgDoc.ref)).data()?.members || [];
-
+      
             // Update organization subscription
             await updateDoc(orgDoc.ref, {
               subscription: {
                 plan: plan,
                 status: 'Active',
                 startedAt: new Date(),
-                expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+                expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
                 stripeCustomerId: customerId,
                 subscriptionId: session.subscription?.toString() || planId,
                 seats: quantity,
                 usedSeats: currentMembers.length,
               }
             });
-
-            console.log("Organization subscription updated");
-
-            // Update subscription for all organization members
-            const userQuery = query(
+      
+            // Find and update admin's user document first
+            const adminUserQuery = query(
               collection(dbAdmin, 'User'),
-              where('email', 'in', currentMembers)
+              where('email', '==', userEmail)
             );
-            const userSnapshot = await getDocs(userQuery);
-
-            const batch = dbAdmin.batch();
-            userSnapshot.docs.forEach((userDoc) => {
-              batch.update(userDoc.ref, {
+            const adminSnapshot = await getDocs(adminUserQuery);
+            if (!adminSnapshot.empty) {
+              await updateDoc(adminSnapshot.docs[0].ref, {
                 subscription: {
                   plan: plan,
                   status: 'Active',
@@ -100,10 +89,32 @@ export const handler: Handler = async (event) => {
                   subscriptionId: session.subscription?.toString() || planId,
                 }
               });
-            });
-            await batch.commit();
-
-            console.log("All member subscriptions updated");
+            }
+      
+            // Update other members' subscriptions
+            const otherMembers = currentMembers.filter(member => member !== userEmail);
+            if (otherMembers.length > 0) {
+              const userQuery = query(
+                collection(dbAdmin, 'User'),
+                where('email', 'in', otherMembers)
+              );
+              const userSnapshot = await getDocs(userQuery);
+      
+              const batch = dbAdmin.batch();
+              userSnapshot.docs.forEach((userDoc) => {
+                batch.update(userDoc.ref, {
+                  subscription: {
+                    plan: plan,
+                    status: 'Active',
+                    startedAt: new Date(),
+                    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                    stripeCustomerId: customerId,
+                    subscriptionId: session.subscription?.toString() || planId,
+                  }
+                });
+              });
+              await batch.commit();
+            }
           }
         } catch (error) {
           console.error("Error handling checkout.session.completed:", error);
