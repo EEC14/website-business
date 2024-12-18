@@ -3,10 +3,18 @@ export function hasFeatureAccess(
     | "Basic"
     | "Basic+ Learning Hub Add-on"
     | "Basic+ Plan Generators Add-on"
-    | "Pro",
-  feature: string
+    | "Pro"
+    | "Free",
+  feature: string,
+  isSettingUpOrg: boolean = false
 ): boolean {
+  // During org setup, only allow access to admin dashboard
+  if (isSettingUpOrg) {
+    return feature === "Admin dashboard";
+  }
+
   const planFeatures = {
+    Free: [],
     Basic: ["Chatbot access"],
     "Basic+ Learning Hub Add-on": ["Chatbot access", "Learning hub add-on"],
     "Basic+ Plan Generators Add-on": [

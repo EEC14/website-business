@@ -18,17 +18,20 @@ import {
 } from 'firebase/auth';
 import { UserPlus } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { Plans } from '../utils/Plans';
 
 // Generate a random password
 const generateRandomPassword = () => {
   return Math.random().toString(36).slice(2, 10) + 'A1!';
 };
 
-export const AdminDashboard: React.FC = () => {
+export const AdminDashboard: React.FC<{ onSetupComplete?: () => void }> = ({ onSetupComplete }) => {
   const [organization, setOrganization] = useState<any>(null);
   const [userProfiles, setUserProfiles] = useState<any[]>([]);
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [selectedRole, setSelectedRole] = useState<'member' | 'admin'>('member');
+  const [selectedPlan, setSelectedPlan] = useState<string>('Basic');
+  const [seats, setSeats] = useState<number>(1);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [importedEmails, setImportedEmails] = useState<string[]>([]);
@@ -36,7 +39,6 @@ export const AdminDashboard: React.FC = () => {
   const auth = getAuth();
   const firestore = getFirestore();
 
-  // Fetch organization and user profiles
   useEffect(() => {
     const fetchOrganizationAndUsers = async (userEmail: string) => {
       try {
@@ -47,12 +49,18 @@ export const AdminDashboard: React.FC = () => {
         const querySnapshot = await getDocs(orgQuery);
 
         if (!querySnapshot.empty) {
-          const orgData = querySnapshot.docs[0].data();
-          setOrganization(orgData);
+          const orgDoc = querySnapshot.docs[0];
+          const orgData = orgDoc.data();
+          setOrganization({...orgData, id: orgDoc.id});
+
+          const currentPlan = orgData.subscription?.plan || 'Free';
+          const currentSeats = orgData.subscription?.seats || 1;
+          setSelectedPlan(currentPlan);
+          setSeats(currentSeats);
 
           const userQuery = query(
             collection(firestore, 'User'),
-            where('email', 'in', orgData.members)
+            where('email', 'in', orgData.members || [])
           );
           const userSnapshot = await getDocs(userQuery);
 
@@ -73,10 +81,12 @@ export const AdminDashboard: React.FC = () => {
     else setError('You must be logged in to access this page.');
   }, [auth, firestore]);
 
-  // Invite a new member
   const inviteMember = async (email: string, adminPassword: string) => {
     try {
-      // Re-authenticate the admin to confirm credentials
+      if (userProfiles.length >= seats) {
+        throw new Error('No remaining seats. Please purchase more seats.');
+      }
+
       const adminEmail = auth.currentUser?.email;
       if (!adminEmail || !adminPassword) {
         throw new Error('Admin email and password are required to proceed.');
@@ -84,7 +94,6 @@ export const AdminDashboard: React.FC = () => {
 
       await signInWithEmailAndPassword(auth, adminEmail, adminPassword);
 
-      // Generate temporary password and invite the user
       const tempPassword = generateRandomPassword();
       const userCredential = await createUserWithEmailAndPassword(auth, email, tempPassword);
       await sendEmailVerification(userCredential.user);
@@ -97,15 +106,16 @@ export const AdminDashboard: React.FC = () => {
         createdAt: new Date().toISOString(),
         status: 'invited',
         subscription: {
-          plan: 'Free',
+          plan: selectedPlan,
           status: 'Active',
           startedAt: new Date().toISOString(),
           expiresAt: null,
           subscriptionId: null,
           stripeCustomerId: null,
         },
-        temporaryPassword: tempPassword, // Temporary field for invited users
+        temporaryPassword: tempPassword,
       };
+
       const userRef = doc(firestore, 'User', userCredential.user.uid);
       await setDoc(userRef, userProfile);
 
@@ -115,14 +125,16 @@ export const AdminDashboard: React.FC = () => {
         ...(selectedRole === 'admin' && { admins: arrayUnion(email) }),
       });
 
-      // Re-authenticate as the admin to ensure the session persists
+      // Refresh user profiles
+      setUserProfiles([...userProfiles, userProfile]);
+
       await signInWithEmailAndPassword(auth, adminEmail, adminPassword);
     } catch (err) {
       console.error(`Failed to invite ${email}`, err);
+      throw err;
     }
   };
 
-  // Handle file upload and email import
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -181,9 +193,85 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const handleUpdateSubscription = async () => {
+    try {
+      const adminPassword = prompt("Please enter your admin password to update:");
+      if (!adminPassword) return;
+
+      const orgRef = doc(firestore, 'organizations', organization.id);
+      await updateDoc(orgRef, {
+        'subscription.seats': seats,
+        'subscription.plan': selectedPlan,
+      });
+
+      if (onSetupComplete) {
+        onSetupComplete();
+      }
+      
+      alert("Subscription updated successfully!");
+    } catch (err) {
+      console.error("Failed to update subscription", err);
+      alert("Failed to update subscription");
+    }
+  };
+
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (error) {
+    return <div className="text-red-600">{error}</div>;
+  }
+
   return (
     <div className="p-6 max-w-4xl mx-auto bg-white shadow-md rounded-lg">
       <h1 className="text-2xl font-bold mb-4">Admin Dashboard - {organization?.name}</h1>
+
+      {/* Plan and Seat Selection */}
+      <div className="mb-4 space-y-4">
+        <div>
+          <label className="block mb-2 font-medium">
+            Select Organization Plan:
+          </label>
+          <select
+            value={selectedPlan}
+            onChange={(e) => setSelectedPlan(e.target.value)}
+            className="w-full p-2 border rounded-lg"
+          >
+            {Object.values(Plans).map((plan) => (
+              <option key={plan.name} value={plan.name}>
+                {plan.name} (${plan.price}/month + ${plan.additionalSeatPrice}/seat)
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block mb-2 font-medium">
+            Number of Seats:
+          </label>
+          <div className="flex items-center space-x-2">
+            <input
+              type="number"
+              min="1"
+              max="100"
+              value={seats}
+              onChange={(e) => setSeats(Math.max(1, parseInt(e.target.value)))}
+              className="w-24 p-2 border rounded-lg"
+            />
+            <span className="text-sm text-gray-600">
+              Seats Used: {userProfiles.length} / {seats}
+            </span>
+          </div>
+        </div>
+
+        <button
+          onClick={handleUpdateSubscription}
+          className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
+        >
+          Update Subscription
+        </button>
+      </div>
 
       {/* File Import */}
       <div className="mb-6">
@@ -207,7 +295,7 @@ export const AdminDashboard: React.FC = () => {
         )}
       </div>
 
-      {/* Organization Members */}
+      {/* User List */}
       <table className="w-full border-collapse border text-left">
         <thead>
           <tr>

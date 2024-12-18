@@ -1,36 +1,43 @@
 export const Plans = {
   Basic: {
-    link: "https://buy.stripe.com/test_7sIbJC8Vg4oAbq84gg", // Replace with your actual Stripe Checkout link
+    link: "https://buy.stripe.com/test_7sIbJC8Vg4oAbq84gg",
     priceId: "price_1QU6dgL8IScSUDMoy9A9qaUQ",
     name: "Basic",
-    price: 10, // Replace with the actual price if available
+    price: 10,
+    additionalSeatPrice: 0,
     features: ["Chatbot access only"],
+    type: "seats",
   },
   BasicPlusLearningHub: {
-    link: "https://buy.stripe.com/test_fZe3d63AWaMYam4aEF", // Replace with your actual Stripe Checkout link
+    link: "https://buy.stripe.com/test_fZe3d63AWaMYam4aEF",
     priceId: "price_1QU6fPL8IScSUDMo2RUiGkD6",
     name: "Basic+ Learning Hub Add-on",
-    price: 30, // Replace with the actual price if available
+    price: 30,
+    additionalSeatPrice: 0,
     features: ["Chatbot access", "Learning hub add-on"],
+    type: "seats",
   },
   BasicPlusGenerators: {
-    link: "https://buy.stripe.com/test_14kaFy8VgaMY79S6oq", // Replace with your actual Stripe Checkout link
+    link: "https://buy.stripe.com/test_14kaFy8VgaMY79S6oq",
     priceId: "price_1QU6f3L8IScSUDMor9nqsEvJ",
     name: "Basic+ Plan Generators Add-on",
-    price: 40, // Replace with the actual price if available
+    price: 40,
+    additionalSeatPrice: 0,
     features: ["Chatbot access", "Plan generators add-on"],
+    type: "seats",
   },
-
   Pro: {
-    link: "https://buy.stripe.com/test_eVa00U1sO3kw1PyfZ1", // Replace with your actual Stripe Checkout link
+    link: "https://buy.stripe.com/test_eVa00U1sO3kw1PyfZ1",
     priceId: "price_1QU6dxL8IScSUDMo5HxtoaIM",
     name: "Pro",
-    price: 50, // Replace with the actual price if available
+    price: 50,
+    additionalSeatPrice: 0,
     features: [
       "Chatbot access",
       "Plan generators add-on",
       "Learning hub add-on",
       "Priority response time",
     ],
+    type: "seats",
   },
 };
