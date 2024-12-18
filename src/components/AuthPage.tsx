@@ -154,7 +154,19 @@ export const AuthPage: React.FC<AuthPageProps> = ({ isAdminSignup = false }) => 
     }
   };
 
-  // ... rest of the component (sendPasswordReset function)
+  const sendPasswordReset = async () => {
+    if (!email) {
+      setError('Please enter your email to reset the password.');
+      return;
+    }
+    try {
+      await sendPasswordResetEmail(auth, email);
+      setResetEmailSent(true);
+      setError('');
+    } catch (error: any) {
+      setError('Failed to send reset email. Please check the email address.');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex flex-col items-center justify-center p-4">
