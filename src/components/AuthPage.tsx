@@ -11,6 +11,7 @@ import {
   sendPasswordResetEmail,
 } from 'firebase/auth';
 import { 
+  collection,
   getFirestore, 
   doc, 
   setDoc
