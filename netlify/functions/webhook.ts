@@ -1,62 +1,256 @@
-case "checkout.session.completed": {
+import { Handler } from "@netlify/functions";
+import stripe from "stripe";
+import dotenv from "dotenv";
+import { Plans } from "../../src/utils/Plans";
+import dbAdmin from "../../src/services/adminSDK";
+import { collection, query, where, getDocs, doc, updateDoc, getDoc } from 'firebase/firestore';
+
+dotenv.config();
+
+const stripeClient = new stripe(process.env.STRIPE_SECRET_KEY!, {
+  apiVersion: "2024-11-20.acacia",
+});
+
+export const handler: Handler = async (event) => {
+  const sig = event.headers["stripe-signature"] as string;
+  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET!;
+  const rawBody = event.body;
+
   try {
-    const session = await stripeClient.checkout.sessions.retrieve(
-      eventReceived.data.object.id,
-      {
-        expand: ["line_items"],
-      }
+    const eventReceived = stripeClient.webhooks.constructEvent(
+      rawBody!,
+      sig,
+      endpointSecret
     );
 
-    const customerId = session.customer;
-    const planId = session.line_items?.data[0]?.price?.id;
-    const seats = session.line_items?.data[0]?.quantity || 1; // Get number of seats purchased
-    const userEmail = session.customer_details?.email;
+    switch (eventReceived.type) {
+      case "checkout.session.completed": {
+        try {
+          const session = await stripeClient.checkout.sessions.retrieve(
+            eventReceived.data.object.id,
+            {
+              expand: ["line_items"],
+            }
+          );
 
-    if (!userEmail || !planId || !customerId) {
-      console.log("Missing required fields.");
-      break;
-    }
+          const customerId = session.customer;
+          const userEmail = session.customer_details?.email;
+          const planId = session.line_items?.data[0]?.price?.id;
+          const quantity = session.line_items?.data[0]?.quantity || 1;
 
-    // Update organization with subscription and seats
-    const orgRef = collection(dbAdmin, 'organizations');
-    const orgQuery = query(orgRef, where('admins', 'array-contains', userEmail));
-    const orgSnapshot = await getDocs(orgQuery);
+          if (!userEmail || !planId || !customerId) {
+            console.log("Missing required fields:", { userEmail, planId, customerId });
+            break;
+          }
 
-    if (!orgSnapshot.empty) {
-      const orgDoc = orgSnapshot.docs[0];
-      await orgDoc.ref.update({
-        subscription: {
-          plan: plan,
-          status: 'Active',
-          startedAt: new Date(),
-          expiresAt: new Date(Date.now() + getPlanDuration(plan)),
-          stripeCustomerId: customerId,
-          subscriptionId: planId,
-          seats: seats,
-          usedSeats: 1 // Initially just the admin
+          const plan = getPlanNameByPriceId(planId);
+          if (!plan) {
+            console.log("Invalid plan ID:", planId);
+            break;
+          }
+
+          console.log("Processing subscription:", {
+            plan,
+            userEmail,
+            quantity,
+            customerId
+          });
+
+          // Find organization where user is admin
+          const orgRef = collection(dbAdmin, 'organizations');
+          const orgQuery = query(orgRef, where('admins', 'array-contains', userEmail));
+          const orgSnapshot = await getDocs(orgQuery);
+
+          if (!orgSnapshot.empty) {
+            const orgDoc = orgSnapshot.docs[0];
+            const currentMembers = (await getDoc(orgDoc.ref)).data()?.members || [];
+
+            // Update organization subscription
+            await updateDoc(orgDoc.ref, {
+              subscription: {
+                plan: plan,
+                status: 'Active',
+                startedAt: new Date(),
+                expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+                stripeCustomerId: customerId,
+                subscriptionId: session.subscription?.toString() || planId,
+                seats: quantity,
+                usedSeats: currentMembers.length,
+              }
+            });
+
+            console.log("Organization subscription updated");
+
+            // Update subscription for all organization members
+            const userQuery = query(
+              collection(dbAdmin, 'User'),
+              where('email', 'in', currentMembers)
+            );
+            const userSnapshot = await getDocs(userQuery);
+
+            const batch = dbAdmin.batch();
+            userSnapshot.docs.forEach((userDoc) => {
+              batch.update(userDoc.ref, {
+                subscription: {
+                  plan: plan,
+                  status: 'Active',
+                  startedAt: new Date(),
+                  expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                  stripeCustomerId: customerId,
+                  subscriptionId: session.subscription?.toString() || planId,
+                }
+              });
+            });
+            await batch.commit();
+
+            console.log("All member subscriptions updated");
+          }
+        } catch (error) {
+          console.error("Error handling checkout.session.completed:", error);
         }
-      });
+        break;
+      }
+
+      case "customer.subscription.updated": {
+        try {
+          const subscription = eventReceived.data.object;
+          const customerId = subscription.customer;
+          const planId = subscription.items.data[0]?.price.id;
+          const quantity = subscription.items.data[0]?.quantity || 1;
+
+          if (!customerId || !planId) {
+            console.error("Missing required fields:", { customerId, planId });
+            break;
+          }
+
+          const plan = getPlanNameByPriceId(planId);
+          if (!plan) {
+            console.error("Invalid plan ID:", planId);
+            break;
+          }
+
+          // Find organization by stripeCustomerId
+          const orgRef = collection(dbAdmin, 'organizations');
+          const orgQuery = query(orgRef, where('subscription.stripeCustomerId', '==', customerId));
+          const orgSnapshot = await getDocs(orgQuery);
+
+          if (!orgSnapshot.empty) {
+            const orgDoc = orgSnapshot.docs[0];
+            const currentData = (await getDoc(orgDoc.ref)).data();
+            const currentMembers = currentData?.members || [];
+
+            // Update organization subscription
+            await updateDoc(orgDoc.ref, {
+              'subscription.plan': plan,
+              'subscription.status': subscription.status,
+              'subscription.seats': quantity,
+              'subscription.usedSeats': currentMembers.length,
+            });
+
+            // Update all member subscriptions
+            const userQuery = query(
+              collection(dbAdmin, 'User'),
+              where('email', 'in', currentMembers)
+            );
+            const userSnapshot = await getDocs(userQuery);
+
+            const batch = dbAdmin.batch();
+            userSnapshot.docs.forEach((userDoc) => {
+              batch.update(userDoc.ref, {
+                'subscription.plan': plan,
+                'subscription.status': subscription.status,
+              });
+            });
+            await batch.commit();
+
+            console.log("Subscription update completed");
+          }
+        } catch (error) {
+          console.error("Error handling customer.subscription.updated:", error);
+        }
+        break;
+      }
+
+      case "customer.subscription.deleted": {
+        try {
+          const subscription = eventReceived.data.object;
+          const customerId = subscription.customer;
+
+          const orgRef = collection(dbAdmin, 'organizations');
+          const orgQuery = query(orgRef, where('subscription.stripeCustomerId', '==', customerId));
+          const orgSnapshot = await getDocs(orgQuery);
+
+          if (!orgSnapshot.empty) {
+            const orgDoc = orgSnapshot.docs[0];
+            const currentMembers = (await getDoc(orgDoc.ref)).data()?.members || [];
+
+            // Reset organization subscription
+            await updateDoc(orgDoc.ref, {
+              subscription: {
+                plan: "Free",
+                status: "Inactive",
+                startedAt: new Date(0),
+                expiresAt: new Date(0),
+                stripeCustomerId: null,
+                subscriptionId: null,
+                seats: 0,
+                usedSeats: currentMembers.length,
+              }
+            });
+
+            // Reset all member subscriptions
+            const userQuery = query(
+              collection(dbAdmin, 'User'),
+              where('email', 'in', currentMembers)
+            );
+            const userSnapshot = await getDocs(userQuery);
+
+            const batch = dbAdmin.batch();
+            userSnapshot.docs.forEach((userDoc) => {
+              batch.update(userDoc.ref, {
+                subscription: {
+                  plan: "Free",
+                  status: "Inactive",
+                  startedAt: new Date(0),
+                  expiresAt: new Date(0),
+                  stripeCustomerId: null,
+                  subscriptionId: null,
+                }
+              });
+            });
+            await batch.commit();
+
+            console.log("Subscription deletion completed");
+          }
+        } catch (error) {
+          console.error("Error handling customer.subscription.deleted:", error);
+        }
+        break;
+      }
+
+      default:
+        console.log(`Unhandled event type ${eventReceived.type}`);
     }
 
-    // Update user's subscription info
-    const userRef = query(collection(dbAdmin, 'User'), where('email', '==', userEmail));
-    const userSnapshot = await getDocs(userRef);
-    
-    if (!userSnapshot.empty) {
-      const userDoc = userSnapshot.docs[0];
-      await userDoc.ref.update({
-        subscription: {
-          plan: plan,
-          status: 'Active',
-          startedAt: new Date(),
-          expiresAt: new Date(Date.now() + getPlanDuration(plan)),
-          stripeCustomerId: customerId,
-          subscriptionId: planId,
-        }
-      });
-    }
-  } catch (error) {
-    console.error("Error handling checkout.session.completed:", error);
+    return {
+      statusCode: 200,
+      body: JSON.stringify({ received: true }),
+    };
+  } catch (err) {
+    console.error("Webhook Error:", err);
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: `Webhook Error: ${err.message}` }),
+    };
   }
-  break;
+};
+
+function getPlanNameByPriceId(priceId: string): string | null {
+  for (const planKey in Plans) {
+    const plan = Plans[planKey as keyof typeof Plans];
+    if (plan.priceId === priceId) {
+      return plan.name;
+    }
+  }
+  return null;
 }
