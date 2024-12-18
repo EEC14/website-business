@@ -3,7 +3,6 @@ import stripe from "stripe";
 import dotenv from "dotenv";
 import { Plans } from "../../src/utils/Plans";
 import dbAdmin from "../../src/services/adminSDK";
-import { collection, query, where, getDocs, doc, updateDoc, getDoc } from 'firebase/firestore';
 
 dotenv.config();
 
@@ -26,60 +25,49 @@ export const handler: Handler = async (event) => {
     switch (eventReceived.type) {
       case "checkout.session.completed": {
         try {
+          console.log('Processing checkout session');
           const session = await stripeClient.checkout.sessions.retrieve(
             eventReceived.data.object.id,
             {
-              expand: ["line_items", "customer", "subscription"],
+              expand: ["line_items"],
             }
           );
-      
-          console.log("Session data:", JSON.stringify(session, null, 2));
-      
+
           const customerId = session.customer;
           const userEmail = session.customer_details?.email;
-          const lineItem = session.line_items?.data[0];
-          const planId = lineItem?.price?.id;
-          const quantity = lineItem?.quantity || 1;
-      
-          console.log("Extracted data:", {
-            customerId,
-            userEmail,
-            planId,
-            quantity
-          });
-      
+          const planId = session.line_items?.data[0]?.price?.id;
+          const quantity = session.line_items?.data[0]?.quantity || 1;
+
+          console.log('Session details:', { customerId, userEmail, planId, quantity });
+
           if (!userEmail || !planId || !customerId) {
-            throw new Error(`Missing required fields: ${JSON.stringify({
-              userEmail,
-              planId,
-              customerId
-            })}`);
+            console.log("Missing required fields:", { userEmail, planId, customerId });
+            break;
           }
-      
+
           const plan = getPlanNameByPriceId(planId);
-          console.log("Found plan:", plan);
-          
           if (!plan) {
-            throw new Error(`No plan found for price ID: ${planId}`);
+            console.log("Invalid plan ID:", planId);
+            break;
           }
-      
+
+          console.log('Found plan:', plan);
+
           // Find organization where user is admin
-          const orgRef = collection(dbAdmin, 'organizations');
-          const orgQuery = query(orgRef, where('admins', 'array-contains', userEmail));
-          const orgSnapshot = await getDocs(orgQuery);
-      
-          console.log("Organization query result:", {
-            exists: !orgSnapshot.empty,
-            count: orgSnapshot.size
-          });
-      
+          const orgSnapshot = await dbAdmin
+            .collection('organizations')
+            .where('admins', 'array-contains', userEmail)
+            .get();
+
           if (!orgSnapshot.empty) {
             const orgDoc = orgSnapshot.docs[0];
-            const currentData = (await getDoc(orgDoc.ref)).data();
+            console.log('Found organization:', orgDoc.id);
             
-            console.log("Current org data:", currentData);
-      
-            const subscriptionUpdate = {
+            const currentData = (await orgDoc.ref.get()).data();
+            const currentMembers = currentData?.members || [];
+
+            // Update organization subscription
+            await orgDoc.ref.update({
               subscription: {
                 plan: plan,
                 status: 'Active',
@@ -88,23 +76,20 @@ export const handler: Handler = async (event) => {
                 stripeCustomerId: customerId,
                 subscriptionId: planId,
                 seats: quantity,
-                usedSeats: currentData?.members?.length || 1,
+                usedSeats: currentMembers.length,
               }
-            };
-      
-            console.log("Updating organization with:", subscriptionUpdate);
-      
-            await updateDoc(orgDoc.ref, subscriptionUpdate);
-            console.log("Organization update completed");
-      
-            // Update admin's subscription
-            const userRef = collection(dbAdmin, 'User');
-            const userQuery = query(userRef, where('email', '==', userEmail));
-            const userSnapshot = await getDocs(userQuery);
-      
+            });
+
+            console.log('Updated organization subscription');
+
+            // Update admin user's subscription
+            const userSnapshot = await dbAdmin
+              .collection('User')
+              .where('email', '==', userEmail)
+              .get();
+
             if (!userSnapshot.empty) {
-              const userDoc = userSnapshot.docs[0];
-              await updateDoc(userDoc.ref, {
+              await userSnapshot.docs[0].ref.update({
                 subscription: {
                   plan: plan,
                   status: 'Active',
@@ -114,16 +99,36 @@ export const handler: Handler = async (event) => {
                   subscriptionId: planId,
                 }
               });
-              console.log("Admin user update completed");
-            } else {
-              console.error("Admin user document not found");
+              console.log('Updated admin user subscription');
             }
-          } else {
-            console.error("No organization found for admin:", userEmail);
+
+            // Update other members' subscriptions
+            const otherMembers = currentMembers.filter(member => member !== userEmail);
+            if (otherMembers.length > 0) {
+              const otherUsersSnapshot = await dbAdmin
+                .collection('User')
+                .where('email', 'in', otherMembers)
+                .get();
+
+              const batch = dbAdmin.batch();
+              otherUsersSnapshot.docs.forEach((userDoc) => {
+                batch.update(userDoc.ref, {
+                  subscription: {
+                    plan: plan,
+                    status: 'Active',
+                    startedAt: new Date(),
+                    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+                    stripeCustomerId: customerId,
+                    subscriptionId: planId,
+                  }
+                });
+              });
+              await batch.commit();
+              console.log('Updated other members subscriptions');
+            }
           }
         } catch (error) {
-          console.error("Error in checkout.session.completed:", error);
-          // Important: Re-throw the error so it's properly logged
+          console.error("Error handling checkout.session.completed:", error);
           throw error;
         }
         break;
@@ -148,17 +153,18 @@ export const handler: Handler = async (event) => {
           }
 
           // Find organization by stripeCustomerId
-          const orgRef = collection(dbAdmin, 'organizations');
-          const orgQuery = query(orgRef, where('subscription.stripeCustomerId', '==', customerId));
-          const orgSnapshot = await getDocs(orgQuery);
+          const orgSnapshot = await dbAdmin
+            .collection('organizations')
+            .where('subscription.stripeCustomerId', '==', customerId)
+            .get();
 
           if (!orgSnapshot.empty) {
             const orgDoc = orgSnapshot.docs[0];
-            const currentData = (await getDoc(orgDoc.ref)).data();
+            const currentData = (await orgDoc.ref.get()).data();
             const currentMembers = currentData?.members || [];
 
             // Update organization subscription
-            await updateDoc(orgDoc.ref, {
+            await orgDoc.ref.update({
               'subscription.plan': plan,
               'subscription.status': subscription.status,
               'subscription.seats': quantity,
@@ -167,11 +173,10 @@ export const handler: Handler = async (event) => {
 
             // Update all member subscriptions
             if (currentMembers.length > 0) {
-              const usersQuery = query(
-                collection(dbAdmin, 'User'),
-                where('email', 'in', currentMembers)
-              );
-              const usersSnapshot = await getDocs(usersQuery);
+              const usersSnapshot = await dbAdmin
+                .collection('User')
+                .where('email', 'in', currentMembers)
+                .get();
 
               const batch = dbAdmin.batch();
               usersSnapshot.docs.forEach((userDoc) => {
@@ -195,17 +200,18 @@ export const handler: Handler = async (event) => {
           const customerId = subscription.customer;
 
           // Find organization by stripeCustomerId
-          const orgRef = collection(dbAdmin, 'organizations');
-          const orgQuery = query(orgRef, where('subscription.stripeCustomerId', '==', customerId));
-          const orgSnapshot = await getDocs(orgQuery);
+          const orgSnapshot = await dbAdmin
+            .collection('organizations')
+            .where('subscription.stripeCustomerId', '==', customerId)
+            .get();
 
           if (!orgSnapshot.empty) {
             const orgDoc = orgSnapshot.docs[0];
-            const currentData = (await getDoc(orgDoc.ref)).data();
+            const currentData = (await orgDoc.ref.get()).data();
             const currentMembers = currentData?.members || [];
 
             // Reset organization subscription
-            await updateDoc(orgDoc.ref, {
+            await orgDoc.ref.update({
               subscription: {
                 plan: "Free",
                 status: "Inactive",
@@ -220,11 +226,10 @@ export const handler: Handler = async (event) => {
 
             // Reset all member subscriptions
             if (currentMembers.length > 0) {
-              const usersQuery = query(
-                collection(dbAdmin, 'User'),
-                where('email', 'in', currentMembers)
-              );
-              const usersSnapshot = await getDocs(usersQuery);
+              const usersSnapshot = await dbAdmin
+                .collection('User')
+                .where('email', 'in', currentMembers)
+                .get();
 
               const batch = dbAdmin.batch();
               usersSnapshot.docs.forEach((userDoc) => {
@@ -247,6 +252,9 @@ export const handler: Handler = async (event) => {
         }
         break;
       }
+
+      default:
+        console.log(`Unhandled event type ${eventReceived.type}`);
     }
 
     return {
