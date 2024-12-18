@@ -218,45 +218,47 @@ export default function App() {
               )}
             </Tab.List>
             <Tab.Panels className="p-4">
-              <Tab.Panel>
-                {hasFeatureAccess(subscription.plan, "Chatbot access", false) ? (
-                        {/* Disclaimer Banner */}
-                  <div className="bg-blue-50 p-4 mb-4 rounded-lg border border-blue-200">
-                      <p className="text-sm text-blue-800">
-                        <strong>Medical Disclaimer:</strong> The information provided by this chat assistant is for general informational and educational purposes only. 
-                        It is not intended to be a substitute for professional medical advice, diagnosis, or treatment. 
-                        Always seek the advice of your physician or other qualified health provider with any questions you may have regarding a medical condition.
-                      </p>
-                  </div>
-                  <div className="space-y-4 mb-4 max-h-[60vh] overflow-y-auto">
-                    {messages.length === 0 ? (
-                      <div className="py-8 text-center text-gray-500">
-                        Start a conversation by typing your medical question below
-                      </div>
-                    ) : (
-                      messages.map((message, index) => (
-                        <ChatMessage
-                          key={index}
-                          message={message.text}
-                          isBot={message.isBot}
-                          isStaff={message.isStaff}
-                          isUrgent={message.isUrgent}
-                        />
-                      ))
-                    )}
-                    {isLoading && (
-                      <div className="p-4 rounded-lg bg-blue-50">
-                        <LoadingDots />
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <button onClick={() => setShowPopup(true)} className="w-full p-4 text-center text-gray-500">
-                    Access Denied
-                  </button>
-                )}
-                <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
-              </Tab.Panel>
+  <Tab.Panel>
+    {hasFeatureAccess(subscription.plan, "Chatbot access", false) ? (
+      <>
+        {/* Disclaimer Banner */}
+        <div className="bg-blue-50 p-4 mb-4 rounded-lg border border-blue-200">
+          <p className="text-sm text-blue-800">
+            <strong>Medical Disclaimer:</strong> The information provided by this chat assistant is for general informational and educational purposes only. 
+            It is not intended to be a substitute for professional medical advice, diagnosis, or treatment. 
+            Always seek the advice of your physician or other qualified health provider with any questions you may have regarding a medical condition.
+          </p>
+        </div>
+        <div className="space-y-4 mb-4 max-h-[60vh] overflow-y-auto">
+          {messages.length === 0 ? (
+            <div className="py-8 text-center text-gray-500">
+              Start a conversation by typing your medical question below
+            </div>
+          ) : (
+            messages.map((message, index) => (
+              <ChatMessage
+                key={index}
+                message={message.text}
+                isBot={message.isBot}
+                isStaff={message.isStaff}
+                isUrgent={message.isUrgent}
+              />
+            ))
+          )}
+          {isLoading && (
+            <div className="p-4 rounded-lg bg-blue-50">
+              <LoadingDots />
+            </div>
+          )}
+        </div>
+        <ChatInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+      </>
+    ) : (
+      <button onClick={() => setShowPopup(true)} className="w-full p-4 text-center text-gray-500">
+        Access Denied
+      </button>
+    )}
+  </Tab.Panel>
               
               <Tab.Panel>
                 {hasFeatureAccess(subscription.plan, "Plan generators add-on", false) ? (
