@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
-import { collection, query, where, getDocs, getDoc, doc } from 'firebase/firestore';
-import { auth, db, UserSubscription, checkIsAdmin } from '../services/firebase';
+import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { auth, db } from '../services/firebase'; // Make sure this path matches your file structure
 
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [subscription, setSubscription] = useState<UserSubscription | null>(null);
+  const [subscription, setSubscription] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [organizationId, setOrganizationId] = useState<string | null>(null);
 
@@ -17,20 +17,19 @@ export const useAuth = () => {
         
         try {
           // Check if user is an admin
-          const isUserAdmin = await checkIsAdmin(user.email || '');
+          const orgCollectionRef = collection(db, 'organizations');
+          const orgQuery = query(orgCollectionRef, where('admins', 'array-contains', user.email));
+          const orgSnapshot = await getDocs(orgQuery);
+          const isUserAdmin = !orgSnapshot.empty;
           setIsAdmin(isUserAdmin);
           
-          if (isUserAdmin) {
-            const orgRef = collection(db as Firestore, 'organizations');
-            const orgQuery = query(orgRef, where('admins', 'array-contains', user.email));
-            const orgSnapshot = await getDocs(orgQuery);
-            if (!orgSnapshot.empty) {
-              setOrganizationId(orgSnapshot.docs[0].id);
-            }
+          if (isUserAdmin && !orgSnapshot.empty) {
+            setOrganizationId(orgSnapshot.docs[0].id);
           }
 
           // Get user subscription
-          const userDoc = await getDoc(doc(db, 'User', user.uid));
+          const userDocRef = doc(db, 'User', user.uid);
+          const userDoc = await getDoc(userDocRef);
           if (userDoc.exists()) {
             setSubscription(userDoc.data().subscription);
             if (!isUserAdmin && userDoc.data().organizationId) {
