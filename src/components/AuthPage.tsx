@@ -16,7 +16,8 @@ import {
   doc, 
   setDoc
 } from 'firebase/firestore';
-
+import privacy from '../assets/Privacy_Policy.pdf';
+import terms from '../assets/Terms_Of_Service_Business.pdf';
 const ADMIN_ACCESS_CODE = "ADMIN2024";
 const STAFF_ACCESS_CODE = "HEALTHSTAFF2024";
 
@@ -245,7 +246,24 @@ export const AuthPage: React.FC = () => {
                     className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
                   <label htmlFor="terms" className="ml-2 block text-sm text-gray-900">
-                    I accept the Terms of Service and Privacy Policy
+                    I accept the{" "}
+                    <a 
+                      href={terms}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800 underline"
+                    >
+                      Terms of Service
+                    </a>{" "}
+                    and{" "}
+                    <a
+                      href={privacy}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:text-blue-800 underline"
+                    >
+                      Privacy Policy
+                    </a>
                   </label>
                 </div>
               </>
