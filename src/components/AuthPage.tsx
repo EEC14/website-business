@@ -25,7 +25,7 @@ interface AuthComponentProps {
   onComplete?: () => void;
 }
 
-export const AuthComponent: React.FC<AuthComponentProps> = ({ 
+export const AuthPage: React.FC<AuthComponentProps> = ({ 
   isAdminSignup = false, 
   onComplete 
 }) => {
@@ -316,4 +316,4 @@ export const AuthComponent: React.FC<AuthComponentProps> = ({
   );
 };
 
-export default AuthComponent;
+export default AuthPage;
