@@ -21,7 +21,7 @@ export const useAuth = () => {
           setIsAdmin(isUserAdmin);
           
           if (isUserAdmin) {
-            const orgRef = collection(db, 'organizations');
+            const orgRef = collection(db as Firestore, 'organizations');
             const orgQuery = query(orgRef, where('admins', 'array-contains', user.email));
             const orgSnapshot = await getDocs(orgQuery);
             if (!orgSnapshot.empty) {
