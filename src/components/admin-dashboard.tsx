@@ -9,92 +9,112 @@ import {
   updateDoc,
   arrayUnion,
   setDoc,
+  getDoc
 } from 'firebase/firestore';
 import {
   getAuth,
   createUserWithEmailAndPassword,
   sendEmailVerification,
-  signInWithEmailAndPassword,
 } from 'firebase/auth';
 import { UserPlus } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { Plans } from '../utils/Plans';
 
 // Generate a random password
 const generateRandomPassword = () => {
   return Math.random().toString(36).slice(2, 10) + 'A1!';
 };
 
-export const AdminDashboard: React.FC<{ onSetupComplete?: () => void }> = ({ onSetupComplete }) => {
+interface UserProfile {
+  uid: string;
+  email: string;
+  role: string;
+  createdAt: string;
+  subscription: {
+    plan: string;
+    status: string;
+    startedAt: string;
+    expiresAt: string | null;
+    subscriptionId: string | null;
+    stripeCustomerId: string | null;
+  };
+  temporaryPassword?: string;
+}
+
+export const AdminDashboard: React.FC = () => {
   const [organization, setOrganization] = useState<any>(null);
-  const [userProfiles, setUserProfiles] = useState<any[]>([]);
+  const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [selectedRole, setSelectedRole] = useState<'member' | 'admin'>('member');
-  const [selectedPlan, setSelectedPlan] = useState<string>('Basic');
-  const [seats, setSeats] = useState<number>(1);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [importedEmails, setImportedEmails] = useState<string[]>([]);
+  const [availableSeats, setAvailableSeats] = useState(0);
 
   const auth = getAuth();
   const firestore = getFirestore();
 
   useEffect(() => {
-    const fetchOrganizationAndUsers = async (userEmail: string) => {
+    const fetchOrganizationAndUsers = async () => {
       try {
         setIsLoading(true);
+        const currentUser = auth.currentUser;
+        if (!currentUser?.email) {
+          throw new Error('No authenticated user');
+        }
 
+        // Get organization data
         const orgRef = collection(firestore, 'organizations');
-        const orgQuery = query(orgRef, where('admins', 'array-contains', userEmail));
-        const querySnapshot = await getDocs(orgQuery);
+        const orgQuery = query(orgRef, where('admins', 'array-contains', currentUser.email));
+        const orgSnapshot = await getDocs(orgQuery);
 
-        if (!querySnapshot.empty) {
-          const orgDoc = querySnapshot.docs[0];
+        if (!orgSnapshot.empty) {
+          const orgDoc = orgSnapshot.docs[0];
           const orgData = orgDoc.data();
-          setOrganization({...orgData, id: orgDoc.id});
+          setOrganization({ ...orgData, id: orgDoc.id });
 
-          const currentPlan = orgData.subscription?.plan || 'Free';
-          const currentSeats = orgData.subscription?.seats || 1;
-          setSelectedPlan(currentPlan);
-          setSeats(currentSeats);
+          // Calculate available seats
+          const totalSeats = orgData.subscription?.seats || 0;
+          const usedSeats = orgData.members?.length || 0;
+          setAvailableSeats(totalSeats - usedSeats);
 
-          const userQuery = query(
-            collection(firestore, 'User'),
-            where('email', 'in', orgData.members || [])
-          );
-          const userSnapshot = await getDocs(userQuery);
-
-          const profiles = userSnapshot.docs.map((doc) => doc.data());
-          setUserProfiles(profiles);
+          // Get user profiles
+          if (orgData.members && orgData.members.length > 0) {
+            const userQuery = query(
+              collection(firestore, 'User'),
+              where('email', 'in', orgData.members)
+            );
+            const userSnapshot = await getDocs(userQuery);
+            const profiles = userSnapshot.docs.map(doc => ({
+              ...doc.data() as UserProfile
+            }));
+            setUserProfiles(profiles);
+          }
         } else {
-          throw new Error('You are not authorized to access this dashboard.');
+          throw new Error('Organization not found');
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load organization data.');
+        console.error('Error fetching data:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load organization data');
       } finally {
         setIsLoading(false);
       }
     };
 
-    const user = auth.currentUser;
-    if (user?.email) fetchOrganizationAndUsers(user.email);
-    else setError('You must be logged in to access this page.');
+    fetchOrganizationAndUsers();
   }, [auth, firestore]);
 
-  const inviteMember = async (email: string, adminPassword: string) => {
+  const inviteMember = async (email: string) => {
     try {
-      if (userProfiles.length >= seats) {
-        throw new Error('No remaining seats. Please purchase more seats.');
+      if (availableSeats <= 0) {
+        throw new Error('No available seats. Please upgrade your subscription to add more users.');
       }
 
-      const adminEmail = auth.currentUser?.email;
-      if (!adminEmail || !adminPassword) {
-        throw new Error('Admin email and password are required to proceed.');
-      }
-
-      await signInWithEmailAndPassword(auth, adminEmail, adminPassword);
-
+      setIsLoading(true);
+      
+      // Create temporary password
       const tempPassword = generateRandomPassword();
+      
+      // Create user account
       const userCredential = await createUserWithEmailAndPassword(auth, email, tempPassword);
       await sendEmailVerification(userCredential.user);
 
@@ -104,10 +124,9 @@ export const AdminDashboard: React.FC<{ onSetupComplete?: () => void }> = ({ onS
         role: selectedRole,
         organizationId: organization.id,
         createdAt: new Date().toISOString(),
-        status: 'invited',
         subscription: {
-          plan: selectedPlan,
-          status: 'Active',
+          plan: organization.subscription.plan,
+          status: "Active",
           startedAt: new Date().toISOString(),
           expiresAt: null,
           subscriptionId: null,
@@ -116,22 +135,28 @@ export const AdminDashboard: React.FC<{ onSetupComplete?: () => void }> = ({ onS
         temporaryPassword: tempPassword,
       };
 
+      // Create user document
       const userRef = doc(firestore, 'User', userCredential.user.uid);
       await setDoc(userRef, userProfile);
 
+      // Update organization
       const orgRef = doc(firestore, 'organizations', organization.id);
       await updateDoc(orgRef, {
         members: arrayUnion(email),
         ...(selectedRole === 'admin' && { admins: arrayUnion(email) }),
       });
 
-      // Refresh user profiles
+      // Update local state
       setUserProfiles([...userProfiles, userProfile]);
+      setAvailableSeats(prev => prev - 1);
+      setNewMemberEmail('');
 
-      await signInWithEmailAndPassword(auth, adminEmail, adminPassword);
+      return true;
     } catch (err) {
-      console.error(`Failed to invite ${email}`, err);
+      console.error('Error inviting member:', err);
       throw err;
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -148,7 +173,11 @@ export const AdminDashboard: React.FC<{ onSetupComplete?: () => void }> = ({ onS
 
       const emails = parsedData
         .flat()
-        .filter((cell: any) => typeof cell === 'string' && cell.includes('@'));
+        .filter((cell: any) => 
+          typeof cell === 'string' && 
+          cell.includes('@') && 
+          cell.endsWith(`@${organization.domain}`)
+        );
 
       setImportedEmails(emails);
     };
@@ -162,28 +191,22 @@ export const AdminDashboard: React.FC<{ onSetupComplete?: () => void }> = ({ onS
     }
 
     if (importedEmails.length === 0) {
-      setError("No emails found in the uploaded file.");
+      setError("No valid emails found in the uploaded file.");
       return;
     }
 
-    const adminPassword = prompt("Please enter your admin password to confirm:");
-    if (!adminPassword) {
-      setError("Admin password is required for bulk invite.");
+    if (importedEmails.length > availableSeats) {
+      setError(`Not enough seats available. You have ${availableSeats} seats available but are trying to invite ${importedEmails.length} users.`);
       return;
     }
 
-    setError("");
+    setError(null);
     setIsLoading(true);
 
     try {
       for (const email of importedEmails) {
-        if (email.endsWith(`@${organization.domain}`)) {
-          await inviteMember(email, adminPassword);
-        } else {
-          console.warn(`Skipping email ${email}: does not match organization domain.`);
-        }
+        await inviteMember(email);
       }
-      alert("Bulk invite completed successfully!");
       setImportedEmails([]);
     } catch (err) {
       console.error("Error during bulk invite:", err);
@@ -193,129 +216,133 @@ export const AdminDashboard: React.FC<{ onSetupComplete?: () => void }> = ({ onS
     }
   };
 
-  const handleUpdateSubscription = async () => {
-    try {
-      const adminPassword = prompt("Please enter your admin password to update:");
-      if (!adminPassword) return;
-
-      const orgRef = doc(firestore, 'organizations', organization.id);
-      await updateDoc(orgRef, {
-        'subscription.seats': seats,
-        'subscription.plan': selectedPlan,
-      });
-
-      if (onSetupComplete) {
-        onSetupComplete();
-      }
-      
-      alert("Subscription updated successfully!");
-    } catch (err) {
-      console.error("Failed to update subscription", err);
-      alert("Failed to update subscription");
-    }
-  };
-
   if (isLoading) {
-    return <div>Loading...</div>;
+    return <div className="p-4 text-center">Loading...</div>;
   }
 
   if (error) {
-    return <div className="text-red-600">{error}</div>;
+    return <div className="p-4 text-red-600">{error}</div>;
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto bg-white shadow-md rounded-lg">
-      <h1 className="text-2xl font-bold mb-4">Admin Dashboard - {organization?.name}</h1>
-
-      {/* Plan and Seat Selection */}
-      <div className="mb-4 space-y-4">
-        <div>
-          <label className="block mb-2 font-medium">
-            Select Organization Plan:
-          </label>
-          <select
-            value={selectedPlan}
-            onChange={(e) => setSelectedPlan(e.target.value)}
-            className="w-full p-2 border rounded-lg"
-          >
-            {Object.values(Plans).map((plan) => (
-              <option key={plan.name} value={plan.name}>
-                {plan.name} (${plan.price}/month + ${plan.additionalSeatPrice}/seat)
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block mb-2 font-medium">
-            Number of Seats:
-          </label>
-          <div className="flex items-center space-x-2">
-            <input
-              type="number"
-              min="1"
-              max="100"
-              value={seats}
-              onChange={(e) => setSeats(Math.max(1, parseInt(e.target.value)))}
-              className="w-24 p-2 border rounded-lg"
-            />
-            <span className="text-sm text-gray-600">
-              Seats Used: {userProfiles.length} / {seats}
-            </span>
+    <div className="p-6 max-w-4xl mx-auto space-y-8">
+      {/* Subscription Info */}
+      <div className="bg-white p-4 rounded-lg shadow">
+        <h2 className="text-lg font-bold mb-4">Subscription Details</h2>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <p className="text-sm text-gray-600">Current Plan</p>
+            <p className="font-medium">{organization?.subscription?.plan || 'Free'}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-600">Available Seats</p>
+            <p className="font-medium">{availableSeats} of {organization?.subscription?.seats || 0}</p>
           </div>
         </div>
-
-        <button
-          onClick={handleUpdateSubscription}
-          className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-        >
-          Update Subscription
-        </button>
       </div>
 
-      {/* File Import */}
-      <div className="mb-6">
-        <label className="block mb-2 font-medium">Import Emails (.csv, .xls, .xlsx):</label>
-        <input
-          type="file"
-          accept=".csv,.xls,.xlsx"
-          onChange={handleFileUpload}
-          className="border p-2 rounded-lg"
-        />
-        {importedEmails.length > 0 && (
-          <div className="mt-2">
-            <p className="text-sm">Imported {importedEmails.length} emails.</p>
-            <button
-              onClick={handleBulkInvite}
-              className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-lg mt-2"
-            >
-              Bulk Invite
-            </button>
+      {/* Invite Form */}
+      <div className="bg-white p-4 rounded-lg shadow">
+        <h2 className="text-lg font-bold mb-4">Invite New Member</h2>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Email</label>
+            <input
+              type="email"
+              value={newMemberEmail}
+              onChange={(e) => setNewMemberEmail(e.target.value)}
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+              placeholder="user@example.com"
+            />
           </div>
-        )}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">Role</label>
+            <select
+              value={selectedRole}
+              onChange={(e) => setSelectedRole(e.target.value as 'member' | 'admin')}
+              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2"
+            >
+              <option value="member">Member</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+          <button
+            onClick={() => inviteMember(newMemberEmail)}
+            disabled={isLoading || availableSeats <= 0}
+            className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-gray-400"
+          >
+            {isLoading ? 'Inviting...' : 'Invite Member'}
+          </button>
+        </div>
+      </div>
+
+      {/* Bulk Import */}
+      <div className="bg-white p-4 rounded-lg shadow">
+        <h2 className="text-lg font-bold mb-4">Bulk Import</h2>
+        <div className="space-y-4">
+          <input
+            type="file"
+            accept=".csv,.xlsx,.xls"
+            onChange={handleFileUpload}
+            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+          />
+          {importedEmails.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-sm text-gray-600">Found {importedEmails.length} valid email(s)</p>
+              <button
+                onClick={handleBulkInvite}
+                disabled={isLoading}
+                className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:bg-gray-400"
+              >
+                {isLoading ? 'Processing...' : 'Import Users'}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* User List */}
-      <table className="w-full border-collapse border text-left">
-        <thead>
-          <tr>
-            <th className="border-b p-2">Email</th>
-            <th className="border-b p-2">Role</th>
-            <th className="border-b p-2">Plan</th>
-            <th className="border-b p-2">Temporary Password</th>
-          </tr>
-        </thead>
-        <tbody>
-          {userProfiles.map((user) => (
-            <tr key={user.email}>
-              <td className="p-2">{user.email}</td>
-              <td className="p-2">{user.role}</td>
-              <td className="p-2">{user.subscription.plan}</td>
-              <td className="p-2">{user.temporaryPassword || 'N/A'}</td>
+      <div className="bg-white p-4 rounded-lg shadow overflow-x-auto">
+        <h2 className="text-lg font-bold mb-4">Organization Members</h2>
+        <table className="min-w-full divide-y divide-gray-200">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Email
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Role
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Status
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Temporary Password
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="bg-white divide-y divide-gray-200">
+            {userProfiles.map((user) => (
+              <tr key={user.email}>
+                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                  {user.email}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {user.role}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {user.subscription.status}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {user.temporaryPassword || 'N/A'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };
+
+export default AdminDashboard;
