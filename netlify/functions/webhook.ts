@@ -26,42 +26,60 @@ export const handler: Handler = async (event) => {
     switch (eventReceived.type) {
       case "checkout.session.completed": {
         try {
-          // Get session with line items
           const session = await stripeClient.checkout.sessions.retrieve(
             eventReceived.data.object.id,
             {
-              expand: ["line_items"],
+              expand: ["line_items", "customer", "subscription"],
             }
           );
-
+      
+          console.log("Session data:", JSON.stringify(session, null, 2));
+      
           const customerId = session.customer;
           const userEmail = session.customer_details?.email;
-          const planId = session.line_items?.data[0]?.price?.id;
-          const quantity = session.line_items?.data[0]?.quantity || 1;
-
+          const lineItem = session.line_items?.data[0];
+          const planId = lineItem?.price?.id;
+          const quantity = lineItem?.quantity || 1;
+      
+          console.log("Extracted data:", {
+            customerId,
+            userEmail,
+            planId,
+            quantity
+          });
+      
           if (!userEmail || !planId || !customerId) {
-            console.log("Missing required fields:", { userEmail, planId, customerId });
-            break;
+            throw new Error(`Missing required fields: ${JSON.stringify({
+              userEmail,
+              planId,
+              customerId
+            })}`);
           }
-
+      
           const plan = getPlanNameByPriceId(planId);
+          console.log("Found plan:", plan);
+          
           if (!plan) {
-            console.log("Invalid plan ID:", planId);
-            break;
+            throw new Error(`No plan found for price ID: ${planId}`);
           }
-
+      
           // Find organization where user is admin
           const orgRef = collection(dbAdmin, 'organizations');
           const orgQuery = query(orgRef, where('admins', 'array-contains', userEmail));
           const orgSnapshot = await getDocs(orgQuery);
-
+      
+          console.log("Organization query result:", {
+            exists: !orgSnapshot.empty,
+            count: orgSnapshot.size
+          });
+      
           if (!orgSnapshot.empty) {
             const orgDoc = orgSnapshot.docs[0];
             const currentData = (await getDoc(orgDoc.ref)).data();
-            const currentMembers = currentData?.members || [];
-
-            // Update organization subscription
-            await updateDoc(orgDoc.ref, {
+            
+            console.log("Current org data:", currentData);
+      
+            const subscriptionUpdate = {
               subscription: {
                 plan: plan,
                 status: 'Active',
@@ -70,19 +88,23 @@ export const handler: Handler = async (event) => {
                 stripeCustomerId: customerId,
                 subscriptionId: planId,
                 seats: quantity,
-                usedSeats: currentMembers.length,
+                usedSeats: currentData?.members?.length || 1,
               }
-            });
-
-            // Update admin user's subscription
-            const userQuery = query(
-              collection(dbAdmin, 'User'),
-              where('email', '==', userEmail)
-            );
+            };
+      
+            console.log("Updating organization with:", subscriptionUpdate);
+      
+            await updateDoc(orgDoc.ref, subscriptionUpdate);
+            console.log("Organization update completed");
+      
+            // Update admin's subscription
+            const userRef = collection(dbAdmin, 'User');
+            const userQuery = query(userRef, where('email', '==', userEmail));
             const userSnapshot = await getDocs(userQuery);
-
+      
             if (!userSnapshot.empty) {
-              await updateDoc(userSnapshot.docs[0].ref, {
+              const userDoc = userSnapshot.docs[0];
+              await updateDoc(userDoc.ref, {
                 subscription: {
                   plan: plan,
                   status: 'Active',
@@ -92,35 +114,17 @@ export const handler: Handler = async (event) => {
                   subscriptionId: planId,
                 }
               });
+              console.log("Admin user update completed");
+            } else {
+              console.error("Admin user document not found");
             }
-
-            // Update other members' subscriptions if any
-            const otherMembers = currentMembers.filter(member => member !== userEmail);
-            if (otherMembers.length > 0) {
-              const otherUsersQuery = query(
-                collection(dbAdmin, 'User'),
-                where('email', 'in', otherMembers)
-              );
-              const otherUsersSnapshot = await getDocs(otherUsersQuery);
-
-              const batch = dbAdmin.batch();
-              otherUsersSnapshot.docs.forEach((userDoc) => {
-                batch.update(userDoc.ref, {
-                  subscription: {
-                    plan: plan,
-                    status: 'Active',
-                    startedAt: new Date(),
-                    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-                    stripeCustomerId: customerId,
-                    subscriptionId: planId,
-                  }
-                });
-              });
-              await batch.commit();
-            }
+          } else {
+            console.error("No organization found for admin:", userEmail);
           }
         } catch (error) {
-          console.error("Error handling checkout.session.completed:", error);
+          console.error("Error in checkout.session.completed:", error);
+          // Important: Re-throw the error so it's properly logged
+          throw error;
         }
         break;
       }
