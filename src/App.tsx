@@ -33,7 +33,6 @@ type Message = {
 
 export default function App() {
   const { user, loading, subscription, isAdmin } = useAuth();
-  const [isSettingUpOrg, setIsSettingUpOrg] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showPopup, setShowPopup] = useState(false);
@@ -95,11 +94,6 @@ export default function App() {
     }
   };
 
-  const handleSetupComplete = () => {
-    console.log('Setup completed');
-    setIsSettingUpOrg(false);
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-b from-blue-50 to-white">
@@ -112,52 +106,9 @@ export default function App() {
     return <AuthPage />;
   }
 
-  // Handle admin organization setup
-  if (isAdmin && (!subscription || subscription.plan === "Free")) {
-    console.log('Admin setup flow:', { isSettingUpOrg });
-    
-    if (!isSettingUpOrg) {
-      return (
-        <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white p-6">
-          <div className="max-w-md mx-auto bg-white rounded-lg shadow-lg p-6">
-            <div className="flex items-center justify-center gap-2 mb-6">
-              <Building className="w-8 h-8 text-blue-500" />
-              <h2 className="text-2xl font-bold">Organization Setup</h2>
-            </div>
-            <p className="mb-6 text-center text-gray-600">
-              Welcome! Please complete your organization setup to continue.
-            </p>
-            <button
-              onClick={() => {
-                console.log('Setting up org');
-                setIsSettingUpOrg(true);
-              }}
-              className="w-full py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
-            >
-              Set up organization now
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <AuthPage 
-        isAdminSignup={true} 
-        onComplete={handleSetupComplete}
-      />
-    );
-  }
-
-  // Regular user subscription check
   if (!subscription || subscription.plan === "Free") {
     return <SubscriptionPage userEmail={user.email!} />;
   }
-
-  // Check feature access for each tab
-  const canAccessChatbot = hasFeatureAccess(subscription.plan, "Chatbot access", false);
-  const canAccessCarePlan = hasFeatureAccess(subscription.plan, "Plan generators add-on", false);
-  const canAccessLearningHub = hasFeatureAccess(subscription.plan, "Learning hub add-on", false);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
@@ -268,7 +219,7 @@ export default function App() {
             </Tab.List>
             <Tab.Panels className="p-4">
               <Tab.Panel>
-                {canAccessChatbot ? (
+                {hasFeatureAccess(subscription.plan, "Chatbot access", false) ? (
                   <div className="space-y-4 mb-4 max-h-[60vh] overflow-y-auto">
                     {messages.length === 0 ? (
                       <div className="py-8 text-center text-gray-500">
@@ -300,7 +251,7 @@ export default function App() {
               </Tab.Panel>
               
               <Tab.Panel>
-                {canAccessCarePlan ? (
+                {hasFeatureAccess(subscription.plan, "Plan generators add-on", false) ? (
                   <CarePlanGenerator />
                 ) : (
                   <button onClick={() => setShowPopup(true)} className="w-full p-4 text-center text-gray-500">
@@ -310,7 +261,7 @@ export default function App() {
               </Tab.Panel>
               
               <Tab.Panel>
-                {canAccessLearningHub ? (
+                {hasFeatureAccess(subscription.plan, "Learning hub add-on", false) ? (
                   <MedicalLearning />
                 ) : (
                   <button onClick={() => setShowPopup(true)} className="w-full p-4 text-center text-gray-500">
