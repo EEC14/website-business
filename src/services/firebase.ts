@@ -24,9 +24,9 @@ const firebaseConfig = {
 const CORRECT_ACCESS_CODE = "HEALTHSTAFF2024";
 
 const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const analytics = getAnalytics(app);
+export const auth = getAuth(app);
+export const db = getFirestore(app);
+export const analytics = getAnalytics(app);
 export const createUser = async (email: string, password: string, accessCode: string) => {
   // Validate access code
   if (accessCode.toUpperCase().trim() !== CORRECT_ACCESS_CODE) {
@@ -59,6 +59,24 @@ export const createUser = async (email: string, password: string, accessCode: st
   } catch (error: any) {
     throw new Error(error.message);
   }
+};
+
+export async function checkIsAdmin(userEmail: string): Promise<boolean> {
+  if (!userEmail) return false;
+  
+  const orgRef = collection(db, 'organizations');
+  const orgQuery = query(orgRef, where('admins', 'array-contains', userEmail));
+  const orgSnapshot = await getDocs(orgQuery);
+  return !orgSnapshot.empty;
+};
+
+export type UserSubscription = {
+  plan: string;
+  status: string;
+  startedAt: string;
+  expiresAt: string | null;
+  subscriptionId: string | null;
+  stripeCustomerId: string | null;
 };
 
 // Rest of the code remains the same as in the original file
