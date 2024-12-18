@@ -37,15 +37,70 @@ export default function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [showPopup, setShowPopup] = useState(false);
-
-  console.log('App render state:', { user, loading, subscription, isAdmin });
+  const [selectedTab, setSelectedTab] = useState(0);
 
   const handleSendMessage = async (message: string) => {
-    // ... existing handleSendMessage code ...
+    setMessages((prev) => [
+      ...prev,
+      {
+        text: message,
+        isBot: false,
+        isStaff: true,
+      },
+    ]);
+
+    setIsLoading(true);
+    try {
+      const response = await generateResponse(message, true);
+      setMessages((prev) => [
+        ...prev,
+        {
+          text: response.content,
+          isBot: true,
+          isUrgent: response.requiresDoctor,
+        },
+      ]);
+    } catch (error) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          text: "I apologize, but I'm having trouble connecting. Please try again later.",
+          isBot: true,
+        },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleManageBilling = async () => {
+    try {
+      const response = await fetch("/.netlify/functions/billingportal", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          customerId: subscription.stripeCustomerId,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      window.location.href = data.url;
+    } catch (error) {
+      console.error("There was an error!", error);
+      alert("Failed to redirect to the billing portal.");
+    }
+  };
+
+  const handleSetupComplete = () => {
+    console.log('Setup completed');
+    setIsSettingUpOrg(false);
   };
 
   if (loading) {
-    console.log('App is loading');
     return (
       <div className="flex items-center justify-center min-h-screen bg-gradient-to-b from-blue-50 to-white">
         <LoadingDots />
@@ -54,42 +109,13 @@ export default function App() {
   }
 
   if (!user) {
-    console.log('No user, showing AuthPage');
     return <AuthPage />;
   }
 
   // Handle admin organization setup
   if (isAdmin && (!subscription || subscription.plan === "Free")) {
-    console.log('Admin without subscription, showing setup');
-    if (!isSettingUpOrg) {
-      return (
-        <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white p-6">
-          <div className="max-w-md mx-auto bg-white rounded-lg shadow-lg p-6">
-            <h2 className="text-xl font-bold mb-4">Organization Setup</h2>
-            <p className="mb-4">Welcome! You need to set up your organization before proceeding.</p>
-            <button
-              onClick={() => setIsSettingUpOrg(true)}
-              className="w-full py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-            >
-              Set up organization now
-            </button>
-          </div>
-        </div>
-      );
-    }
-    return <AuthPage isAdminSignup={true} />;
-  }
-
-  // Regular user subscription check
-  if (!subscription || subscription.plan === "Free") {
-    console.log('No subscription, showing SubscriptionPage');
-    return <SubscriptionPage userEmail={user.email!} />;
-  }
-
-  console.log('Showing main app');
-
-  // Handle admin organization setup
-  if (isAdmin && (!subscription || subscription.plan === "Free")) {
+    console.log('Admin setup flow:', { isSettingUpOrg });
+    
     if (!isSettingUpOrg) {
       return (
         <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white p-6">
@@ -102,7 +128,10 @@ export default function App() {
               Welcome! Please complete your organization setup to continue.
             </p>
             <button
-              onClick={() => setIsSettingUpOrg(true)}
+              onClick={() => {
+                console.log('Setting up org');
+                setIsSettingUpOrg(true);
+              }}
               className="w-full py-3 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
             >
               Set up organization now
@@ -111,7 +140,13 @@ export default function App() {
         </div>
       );
     }
-    return <AuthPage isAdminSignup={true} />;
+
+    return (
+      <AuthPage 
+        isAdminSignup={true} 
+        onComplete={handleSetupComplete}
+      />
+    );
   }
 
   // Regular user subscription check
@@ -123,7 +158,6 @@ export default function App() {
   const canAccessChatbot = hasFeatureAccess(subscription.plan, "Chatbot access", false);
   const canAccessCarePlan = hasFeatureAccess(subscription.plan, "Plan generators add-on", false);
   const canAccessLearningHub = hasFeatureAccess(subscription.plan, "Learning hub add-on", false);
-  const canAccessAdminDashboard = isAdmin;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
@@ -287,13 +321,7 @@ export default function App() {
               
               {isAdmin && (
                 <Tab.Panel>
-                  {canAccessAdminDashboard ? (
-                    <AdminDashboard onSetupComplete={() => setIsSettingUpOrg(false)} />
-                  ) : (
-                    <button onClick={() => setShowPopup(true)} className="w-full p-4 text-center text-gray-500">
-                      Access Denied
-                    </button>
-                  )}
+                  <AdminDashboard />
                 </Tab.Panel>
               )}
             </Tab.Panels>
