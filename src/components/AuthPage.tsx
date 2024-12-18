@@ -1,11 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Stethoscope, 
-  Mail, 
-  Lock, 
-  AlertCircle, 
-  KeyRound, 
-  Building 
+  AlertCircle 
 } from 'lucide-react';
 import { 
   getAuth, 
@@ -26,12 +22,16 @@ import {
   arrayUnion
 } from 'firebase/firestore';
 
-// Use access codes from firebase.ts
 const ADMIN_ACCESS_CODE = "ADMIN2024";
 const STAFF_ACCESS_CODE = "HEALTHSTAFF2024";
 
-export const AuthPage: React.FC = () => {
-  const [isLogin, setIsLogin] = useState(true);
+interface AuthPageProps {
+  isAdminSignup?: boolean;
+  onComplete?: () => void;
+}
+
+export const AuthPage: React.FC<AuthPageProps> = ({ isAdminSignup = false, onComplete }) => {
+  const [isLogin, setIsLogin] = useState(!isAdminSignup);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [accessCode, setAccessCode] = useState('');
@@ -41,29 +41,29 @@ export const AuthPage: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [resetEmailSent, setResetEmailSent] = useState(false);
-  const [isAdminSignup, setIsAdminSignup] = useState(false);
 
   const auth = getAuth();
   const firestore = getFirestore();
 
+  console.log('AuthPage render state:', { isLogin, isAdminSignup, loading });
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('Submit triggered');
     setError('');
     setLoading(true);
 
     try {
       if (isLogin) {
+        console.log('Attempting sign in with:', { email });
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        if (!userCredential.user.emailVerified) {
-          await sendEmailVerification(userCredential.user);
-          throw new Error('Please verify your email. A verification link has been sent.');
-        }
+        console.log('Sign in successful:', userCredential);
       } else {
+        console.log('Starting signup process');
         if (!termsAccepted) {
           throw new Error('Please accept the Terms of Service and Privacy Policy');
         }
 
-        // Check access code and determine if this is an admin signup
         const isAdmin = accessCode.toUpperCase().trim() === ADMIN_ACCESS_CODE;
         const isStaff = accessCode.toUpperCase().trim() === STAFF_ACCESS_CODE;
 
@@ -71,18 +71,25 @@ export const AuthPage: React.FC = () => {
           throw new Error('Invalid access code');
         }
 
-        // If admin signup, require organization details
-        if (isAdmin && (!organizationName || !organizationDomain)) {
+        if ((isAdmin || isAdminSignup) && (!organizationName || !organizationDomain)) {
           throw new Error('Organization name and domain are required for admin signup');
         }
 
+        console.log('Creating user account');
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        await sendEmailVerification(userCredential.user);
+        console.log('User account created');
+
+        try {
+          await sendEmailVerification(userCredential.user);
+          console.log('Verification email sent');
+        } catch (verificationError) {
+          console.error('Error sending verification:', verificationError);
+        }
 
         const user = userCredential.user;
         
-        if (isAdmin) {
-          // Create organization document
+        if (isAdmin || isAdminSignup) {
+          console.log('Creating organization');
           const orgRef = doc(collection(firestore, 'organizations'));
           await setDoc(orgRef, {
             name: organizationName,
@@ -100,8 +107,8 @@ export const AuthPage: React.FC = () => {
               stripeCustomerId: null,
             }
           });
+          console.log('Organization created');
 
-          // Create user document with admin role
           await setDoc(doc(firestore, 'User', user.uid), {
             uid: user.uid,
             email: user.email,
@@ -118,8 +125,8 @@ export const AuthPage: React.FC = () => {
             },
             accessCodeVerified: true,
           });
+          console.log('Admin user document created');
         } else {
-          // Create regular user document
           await setDoc(doc(firestore, 'User', user.uid), {
             uid: user.uid,
             email: user.email,
@@ -135,12 +142,19 @@ export const AuthPage: React.FC = () => {
             },
             accessCodeVerified: true,
           });
+          console.log('Regular user document created');
+        }
+
+        if (onComplete) {
+          onComplete();
         }
       }
     } catch (error: any) {
+      console.error('Auth error:', error);
       setError(error.message);
     } finally {
       setLoading(false);
+      console.log('Auth attempt completed');
     }
   };
 
@@ -165,7 +179,11 @@ export const AuthPage: React.FC = () => {
           <Stethoscope className="mx-auto h-12 w-12 text-blue-500" />
           <h1 className="mt-2 text-3xl font-bold text-gray-900">HealthChat</h1>
           <p className="mt-2 text-gray-600">
-            {isLogin ? 'Sign in to your account' : 'Create your account'}
+            {isAdminSignup 
+              ? 'Complete your organization setup'
+              : isLogin 
+                ? 'Sign in to your account' 
+                : 'Create your account'}
           </p>
         </div>
 
@@ -212,26 +230,23 @@ export const AuthPage: React.FC = () => {
               />
             </div>
 
-            {!isLogin && (
+            {(!isLogin || isAdminSignup) && (
               <>
                 <div>
                   <label htmlFor="accessCode" className="block text-sm font-medium text-gray-700">
-                    Access Code
+                    {isAdminSignup ? 'Admin Access Code' : 'Access Code'}
                   </label>
                   <input
                     id="accessCode"
                     type="text"
                     required
                     value={accessCode}
-                    onChange={(e) => {
-                      setAccessCode(e.target.value);
-                      setIsAdminSignup(e.target.value.toUpperCase().trim() === ADMIN_ACCESS_CODE);
-                    }}
+                    onChange={(e) => setAccessCode(e.target.value)}
                     className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-blue-500"
                   />
                 </div>
 
-                {isAdminSignup && (
+                {(isAdminSignup || accessCode.toUpperCase().trim() === ADMIN_ACCESS_CODE) && (
                   <>
                     <div>
                       <label htmlFor="organizationName" className="block text-sm font-medium text-gray-700">
@@ -280,21 +295,19 @@ export const AuthPage: React.FC = () => {
             )}
           </div>
 
-          <div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-300"
-            >
-              {loading ? 'Please wait...' : isLogin ? 'Sign In' : 'Create Account'}
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:bg-blue-300"
+          >
+            {loading ? 'Please wait...' : isLogin ? 'Sign In' : 'Create Account'}
+          </button>
 
-          {isLogin && (
+          {isLogin && !isAdminSignup && (
             <div className="text-center">
               <button
                 type="button"
-                onClick={() => sendPasswordReset()}
+                onClick={sendPasswordReset}
                 className="text-sm text-blue-600 hover:text-blue-500"
               >
                 Forgot Password?
@@ -302,15 +315,17 @@ export const AuthPage: React.FC = () => {
             </div>
           )}
 
-          <div className="text-center">
-            <button
-              type="button"
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-sm text-blue-600 hover:text-blue-500"
-            >
-              {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
-            </button>
-          </div>
+          {!isAdminSignup && (
+            <div className="text-center">
+              <button
+                type="button"
+                onClick={() => setIsLogin(!isLogin)}
+                className="text-sm text-blue-600 hover:text-blue-500"
+              >
+                {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
+              </button>
+            </div>
+          )}
         </form>
       </div>
     </div>
