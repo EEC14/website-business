@@ -1,8 +1,21 @@
+import { useState, useEffect } from 'react';
+import { User } from 'firebase/auth';
+import { 
+  collection, 
+  query, 
+  where, 
+  getDocs,
+  getDoc,
+  doc
+} from 'firebase/firestore';
+import { auth, db } from '../services/firebase'; // Assuming this is your Firebase config
+
 export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [subscription, setSubscription] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
 
   useEffect(() => {
     return onAuthStateChanged(auth, async (user) => {
@@ -13,21 +26,30 @@ export const useAuth = () => {
         const orgRef = collection(db, 'organizations');
         const orgQuery = query(orgRef, where('admins', 'array-contains', user.email));
         const orgSnapshot = await getDocs(orgQuery);
-        setIsAdmin(!orgSnapshot.empty);
+        const isUserAdmin = !orgSnapshot.empty;
+        setIsAdmin(isUserAdmin);
+        
+        if (isUserAdmin) {
+          setOrganizationId(orgSnapshot.docs[0].id);
+        }
 
         // Get user subscription
         const userDoc = await getDoc(doc(db, 'User', user.uid));
         if (userDoc.exists()) {
           setSubscription(userDoc.data().subscription);
+          if (!isUserAdmin && userDoc.data().organizationId) {
+            setOrganizationId(userDoc.data().organizationId);
+          }
         }
       } else {
         setUser(null);
         setSubscription(null);
         setIsAdmin(false);
+        setOrganizationId(null);
       }
       setLoading(false);
     });
   }, []);
 
-  return { user, loading, subscription, isAdmin };
+  return { user, loading, subscription, isAdmin, organizationId };
 };

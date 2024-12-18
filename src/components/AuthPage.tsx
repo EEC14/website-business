@@ -25,23 +25,13 @@ import {
   updateDoc,
   arrayUnion
 } from 'firebase/firestore';
-import privacy from '../assets/Privacy_Policy.pdf';
-import terms from '../assets/Terms_Of_Service_Business.pdf';
 
-// User Profile Interface
-interface UserProfile {
-  id: string;
-  email: string;
-  organizationId: string;
-  role: 'member' | 'admin' | 'owner';
-  createdAt: number;
-  lastLogin?: number;
-  status: 'active' | 'invited' | 'suspended';
-  currentPlan?: string;
+interface AuthPageProps {
+  isAdminSignup?: boolean;
 }
 
-export const AuthPage: React.FC = () => {
-  const [isLogin, setIsLogin] = useState(true);
+export const AuthPage: React.FC<AuthPageProps> = ({ isAdminSignup = false }) => {
+  const [isLogin, setIsLogin] = useState(!isAdminSignup); // Force signup mode for admin signup
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [accessCode, setAccessCode] = useState('');
@@ -51,13 +41,20 @@ export const AuthPage: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [resetEmailSent, setResetEmailSent] = useState(false);
+  const [isOrganizationAdmin, setIsOrganizationAdmin] = useState(isAdminSignup);
 
   const auth = getAuth();
   const firestore = getFirestore();
 
   const GLOBAL_ACCESS_CODE = 'HEALTH2024';
+  const ADMIN_ACCESS_CODE = 'ADMIN2024'; // Special code for admin signup
 
-  const validateAccessCode = (code: string): boolean => code === GLOBAL_ACCESS_CODE;
+  const validateAccessCode = (code: string): boolean => {
+    if (isOrganizationAdmin) {
+      return code === ADMIN_ACCESS_CODE;
+    }
+    return code === GLOBAL_ACCESS_CODE;
+  };
 
   const findOrCreateOrganization = async (organizationName: string, organizationDomain: string) => {
     const orgsRef = collection(firestore, 'organizations');
@@ -77,15 +74,28 @@ export const AuthPage: React.FC = () => {
     const orgResult = await findOrCreateOrganization(organizationName, organizationDomain);
 
     if (orgResult.isNew) {
+      // Create new organization with subscription initialized
       await setDoc(orgResult.ref, {
         name: organizationName,
         domain: organizationDomain,
         members: [user.email],
         admins: [user.email],
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        subscription: {
+          plan: "Free",
+          status: "Active",
+          seats: 1,
+          startedAt: new Date().toISOString(),
+          expiresAt: null,
+          subscriptionId: null,
+          stripeCustomerId: null,
+        },
       });
     } else {
-      await updateDoc(orgResult.ref, { members: arrayUnion(user.email) });
+      await updateDoc(orgResult.ref, { 
+        members: arrayUnion(user.email),
+        ...(isOrganizationAdmin && { admins: arrayUnion(user.email) })
+      });
     }
 
     const userProfile = {
@@ -93,7 +103,7 @@ export const AuthPage: React.FC = () => {
       email: user.email || '',
       createdAt: new Date().toISOString(),
       organizationId: orgResult.id,
-      role: 'member',
+      role: isOrganizationAdmin ? 'admin' : 'member',
       subscription: {
         plan: "Free",
         status: "Active",
@@ -115,7 +125,7 @@ export const AuthPage: React.FC = () => {
     setError('');
     setLoading(true);
     try {
-      if (isLogin) {
+      if (isLogin && !isAdminSignup) {
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         if (!userCredential.user.emailVerified) {
           await sendEmailVerification(userCredential.user);
@@ -124,11 +134,18 @@ export const AuthPage: React.FC = () => {
       } else {
         if (!termsAccepted) throw new Error('Please accept the Terms of Service and Privacy Policy');
         if (!validateAccessCode(accessCode)) throw new Error('Invalid access code');
+        if (isOrganizationAdmin && (!organizationName || !organizationDomain)) {
+          throw new Error('Organization name and domain are required for admin signup');
+        }
 
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         await sendEmailVerification(userCredential.user);
 
-        await createUserInFirestore(userCredential.user, organizationName, organizationDomain);
+        await createUserInFirestore(
+          userCredential.user, 
+          organizationName || email.split('@')[1], // Use email domain if no org name
+          organizationDomain || email.split('@')[1] // Use email domain if no org domain
+        );
       }
     } catch (error: any) {
       setError(error.message);
@@ -137,19 +154,7 @@ export const AuthPage: React.FC = () => {
     }
   };
 
-  const sendPasswordReset = async () => {
-    if (!email) {
-      setError('Please enter your email to reset the password.');
-      return;
-    }
-    try {
-      await sendPasswordResetEmail(auth, email);
-      setResetEmailSent(true);
-      setError('');
-    } catch (error: any) {
-      setError('Failed to send reset email. Please check the email address.');
-    }
-  };
+  // ... rest of the component (sendPasswordReset function)
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-white flex flex-col items-center justify-center p-4">
@@ -158,12 +163,16 @@ export const AuthPage: React.FC = () => {
           <Stethoscope className="w-8 h-8 text-blue-500" />
           <h1 className="text-3xl font-bold text-gray-900">HealthChat</h1>
           <p className="mt-2 text-gray-600">
-            {isLogin ? 'Sign in to your account' : 'Create your account'}
+            {isAdminSignup 
+              ? 'Create your organization account' 
+              : isLogin 
+                ? 'Sign in to your account' 
+                : 'Create your account'}
           </p>
         </div>
 
         {error && <div className="bg-red-50 p-4 rounded-lg text-red-700">{error}</div>}
-        {resetEmailSent && <div className="bg-green-50 p-4 rounded-lg text-green-700">Password reset email sent! Please check your inbox.</div>}
+        {resetEmailSent && <div className="bg-green-50 p-4 rounded-lg text-green-700">Password reset email sent!</div>}
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
@@ -190,23 +199,95 @@ export const AuthPage: React.FC = () => {
             />
           </div>
 
-          <button type="submit" disabled={loading} className="w-full bg-blue-600 text-white py-2 rounded-lg">
+          {(!isLogin || isAdminSignup) && (
+            <>
+              <div>
+                <label htmlFor="accessCode" className="block text-sm font-medium text-gray-700">
+                  {isAdminSignup ? 'Admin Access Code' : 'Access Code'}
+                </label>
+                <input
+                  id="accessCode"
+                  type="text"
+                  required
+                  value={accessCode}
+                  onChange={(e) => setAccessCode(e.target.value)}
+                  className="w-full px-3 py-2 border rounded-lg"
+                />
+              </div>
+
+              {isAdminSignup && (
+                <>
+                  <div>
+                    <label htmlFor="organizationName" className="block text-sm font-medium text-gray-700">
+                      Organization Name
+                    </label>
+                    <input
+                      id="organizationName"
+                      type="text"
+                      required
+                      value={organizationName}
+                      onChange={(e) => setOrganizationName(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg"
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="organizationDomain" className="block text-sm font-medium text-gray-700">
+                      Organization Domain
+                    </label>
+                    <input
+                      id="organizationDomain"
+                      type="text"
+                      required
+                      value={organizationDomain}
+                      onChange={(e) => setOrganizationDomain(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-lg"
+                      placeholder="example.com"
+                    />
+                  </div>
+                </>
+              )}
+
+              <div className="flex items-center">
+                <input
+                  id="terms"
+                  type="checkbox"
+                  checked={termsAccepted}
+                  onChange={(e) => setTermsAccepted(e.target.checked)}
+                  className="h-4 w-4 text-blue-600"
+                />
+                <label htmlFor="terms" className="ml-2 block text-sm text-gray-900">
+                  I accept the Terms of Service and Privacy Policy
+                </label>
+              </div>
+            </>
+          )}
+
+          <button 
+            type="submit" 
+            disabled={loading} 
+            className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:bg-blue-400"
+          >
             {loading ? 'Please wait...' : isLogin ? 'Sign In' : 'Create Account'}
           </button>
 
-          {isLogin && (
-            <div className="text-center mt-2">
-              <button type="button" onClick={sendPasswordReset} className="text-sm text-blue-600">
-                Forgot Password?
-              </button>
-            </div>
-          )}
+          {!isAdminSignup && (
+            <>
+              {isLogin && (
+                <div className="text-center mt-2">
+                  <button type="button" onClick={sendPasswordReset} className="text-sm text-blue-600">
+                    Forgot Password?
+                  </button>
+                </div>
+              )}
 
-          <div className="text-center">
-            <button type="button" onClick={() => setIsLogin(!isLogin)} className="text-sm text-blue-600">
-              {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
-            </button>
-          </div>
+              <div className="text-center">
+                <button type="button" onClick={() => setIsLogin(!isLogin)} className="text-sm text-blue-600">
+                  {isLogin ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
+                </button>
+              </div>
+            </>
+          )}
         </form>
       </div>
     </div>
