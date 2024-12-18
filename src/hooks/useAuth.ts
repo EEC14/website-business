@@ -1,26 +1,33 @@
-import { useState, useEffect } from "react";
-import { User } from "firebase/auth";
-import { onAuthChange, getUserSubscription } from "../services/firebase";
-
-export function useAuth() {
+export const useAuth = () => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const [subscription, setSubscription] = useState<any | null>(null);
+  const [subscription, setSubscription] = useState<any>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthChange(async (user) => {
-      setUser(user);
+    return onAuthStateChanged(auth, async (user) => {
       if (user) {
-        const sub = await getUserSubscription(user.uid);
-        setSubscription(sub);
+        setUser(user);
+        
+        // Check if user is an admin
+        const orgRef = collection(db, 'organizations');
+        const orgQuery = query(orgRef, where('admins', 'array-contains', user.email));
+        const orgSnapshot = await getDocs(orgQuery);
+        setIsAdmin(!orgSnapshot.empty);
+
+        // Get user subscription
+        const userDoc = await getDoc(doc(db, 'User', user.uid));
+        if (userDoc.exists()) {
+          setSubscription(userDoc.data().subscription);
+        }
       } else {
+        setUser(null);
         setSubscription(null);
+        setIsAdmin(false);
       }
       setLoading(false);
     });
-
-    return () => unsubscribe();
   }, []);
 
-  return { user, loading, subscription };
-}
+  return { user, loading, subscription, isAdmin };
+};
