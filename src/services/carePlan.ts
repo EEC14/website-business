@@ -29,7 +29,7 @@ export async function generatePlanQuestions(
           content: `Generate questions for someone with these goals: ${goals}`,
         },
       ],
-      model: "gpt-3.5-turbo",
+      model: "gpt-4o-mini",
       temperature: 0.7,
     });
 
@@ -73,14 +73,14 @@ export async function generatePlan(
           content: `Create a ${type} plan with the following information:\n\nGoals: ${goals}\n\nUser Information:\n${questionsAndAnswers}`,
         },
       ],
-      model: "gpt-3.5-turbo",
+      model: "gpt-4o",
       temperature: 0.7,
       max_tokens: 1000,
     });
 
     return completion.choices[0]?.message?.content || "Unable to generate plan";
   } catch (error) {
-    console.error("OpenAI API Error:", error);
+    console.error("Agent error:", error);
     throw new Error(`Failed to generate ${type} plan`);
   }
 }

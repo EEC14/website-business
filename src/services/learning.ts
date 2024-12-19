@@ -49,7 +49,7 @@ Format the response as a JSON array of questions, each with:
 export async function generateStudyMaterial(topic: string): Promise<StudyMaterial> {
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+      model: "gpt-4o",
       messages: [
         { role: "system", content: STUDY_PROMPT },
         { role: "user", content: `Generate study material about: ${topic}` }
