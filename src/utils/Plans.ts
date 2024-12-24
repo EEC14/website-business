@@ -1,7 +1,7 @@
 export const Plans = {
   Basic: {
-    link: "https://buy.stripe.com/test_7sIbJC8Vg4oAbq84gg",
-    priceId: "price_1QU6dgL8IScSUDMoy9A9qaUQ",
+    link: "https://buy.stripe.com/dR64js8p88b6eAwaEI",
+    priceId: "price_1QWgKbL8IScSUDMo2Th24hJY",
     name: "Basic",
     price: 10,
     additionalSeatPrice: 0,
@@ -9,8 +9,8 @@ export const Plans = {
     type: "seats",
   },
   BasicPlusLearningHub: {
-    link: "https://buy.stripe.com/test_fZe3d63AWaMYam4aEF",
-    priceId: "price_1QU6fPL8IScSUDMo2RUiGkD6",
+    link: "https://buy.stripe.com/5kA6rA34O1MI1NKaEJ",
+    priceId: "price_1QWgKTL8IScSUDMoeyaMtO0N",
     name: "Basic+ Learning Hub Add-on",
     price: 30,
     additionalSeatPrice: 0,
@@ -18,8 +18,8 @@ export const Plans = {
     type: "seats",
   },
   BasicPlusGenerators: {
-    link: "https://buy.stripe.com/test_14kaFy8VgaMY79S6oq",
-    priceId: "price_1QU6f3L8IScSUDMor9nqsEvJ",
+    link: "https://buy.stripe.com/5kAaHQdJs2QM0JG7sy",
+    priceId: "price_1QWgKWL8IScSUDMorKMYHWnB",
     name: "Basic+ Plan Generators Add-on",
     price: 40,
     additionalSeatPrice: 0,
@@ -27,8 +27,8 @@ export const Plans = {
     type: "seats",
   },
   Pro: {
-    link: "https://buy.stripe.com/test_eVa00U1sO3kw1PyfZ1",
-    priceId: "price_1QU6dxL8IScSUDMo5HxtoaIM",
+    link: "https://buy.stripe.com/3cs6rA8p82QM6403cj",
+    priceId: "price_1QWgKYL8IScSUDMo5A3ZNUo0",
     name: "Pro",
     price: 50,
     additionalSeatPrice: 0,
