@@ -129,7 +129,7 @@ export const SubscriptionPage = ({ userEmail }: SubscriptionPageProps) => {
 
         {/* Additional Information */}
         <div className="p-6 mt-8 text-center text-gray-600">
-          <p>All plans include a 30-day free trial. Cancel anytime.</p>
+          
           <p className="mt-2">
             Need more seats or have questions?{" "}
             <a href="mailto:support@healthchat.com" className="text-blue-500 hover:text-blue-600">
