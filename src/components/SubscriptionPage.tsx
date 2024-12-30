@@ -100,7 +100,7 @@ export const SubscriptionPage = ({ userEmail }: SubscriptionPageProps) => {
 
                 <div className="space-y-2">
                   <label className="block text-sm font-medium text-gray-700">
-                    Number of Seats
+                    Calculate the total price. You'll nned to reinsert this number in the payment page.
                   </label>
                   <input
                     type="number"

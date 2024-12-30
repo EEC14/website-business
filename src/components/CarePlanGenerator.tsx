@@ -211,10 +211,6 @@ export const CarePlanGenerator: React.FC = () => {
 
           {step === "select" && (
             <div className="space-y-6">
-              <p className="text-gray-600">
-                Choose the type of plan you'd like to generate:
-              </p>
-
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <button
                   onClick={() => {
