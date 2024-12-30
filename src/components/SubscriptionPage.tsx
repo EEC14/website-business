@@ -100,7 +100,7 @@ export const SubscriptionPage = ({ userEmail }: SubscriptionPageProps) => {
 
                 <div className="space-y-2">
                   <label className="block text-sm font-medium text-gray-700">
-                    Calculate the total price. You'll nned to reinsert this number in the payment page.
+                    Calculate the total price. You'll need to reinsert this number in the payment page.
                   </label>
                   <input
                     type="number"
@@ -132,7 +132,7 @@ export const SubscriptionPage = ({ userEmail }: SubscriptionPageProps) => {
           
           <p className="mt-2">
             Need more seats or have questions?{" "}
-            <a href="mailto:support@healthchat.com" className="text-blue-500 hover:text-blue-600">
+            <a href="mailto:support@esbhealthcare.com" className="text-blue-500 hover:text-blue-600">
               Contact us
             </a>
           </p>
