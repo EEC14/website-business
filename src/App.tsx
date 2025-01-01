@@ -91,8 +91,15 @@ export default function App() {
       console.log("Portal URL:", data.url);
       window.location.href = data.url;
     } catch (error) {
-      console.error("There was an error!", error);
-      alert("Failed to redirect to the billing portal.");
+      const errorDetails = error instanceof Error ? error.message : String(error);
+      console.error("Stripe Error Details:", errorDetails);
+      return {
+        statusCode: 500,
+        body: JSON.stringify({ 
+          error: "Failed to create billing portal session",
+          details: errorDetails 
+        }),
+      };
     }
   };
 
