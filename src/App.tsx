@@ -83,23 +83,16 @@ export default function App() {
           customerId: subscription.stripeCustomerId,
         }),
       });
-      console.log("Response:", response.status);
+      //console.log("Response:", response.status);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const data = await response.json();
-      console.log("Portal URL:", data.url);
+      //console.log("Portal URL:", data.url);
       window.location.href = data.url;
     } catch (error) {
-      const errorDetails = error instanceof Error ? error.message : String(error);
-      console.error("Stripe Error Details:", errorDetails);
-      return {
-        statusCode: 500,
-        body: JSON.stringify({ 
-          error: "Failed to create billing portal session",
-          details: errorDetails 
-        }),
-      };
+      console.error("There was an error!", error);
+      alert("Failed to redirect to the billing portal.");
     }
   };
 
