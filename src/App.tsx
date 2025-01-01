@@ -83,10 +83,12 @@ export default function App() {
           customerId: subscription.stripeCustomerId,
         }),
       });
+      console.log("Response:", response.status);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const data = await response.json();
+      console.log("Portal URL:", data.url);
       window.location.href = data.url;
     } catch (error) {
       console.error("There was an error!", error);

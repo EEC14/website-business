@@ -19,7 +19,7 @@ export const handler: Handler = async (event) => {
     console.error("Error creating billing portal session:", error);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: "Failed to cancel subscription" }),
+      body: JSON.stringify({ error: "Failed to create billing portal session" }),
     };
   }
 };
