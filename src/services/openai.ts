@@ -17,11 +17,14 @@ import {
   getDownloadURL,
   deleteObject
 } from 'firebase/storage';
-import * as pdfjsLib from 'pdfjs-dist';
+import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
+import * as pdfjsWorker from 'pdfjs-dist/build/pdf.worker';
 const openai = new OpenAI({
   apiKey: import.meta.env.VITE_OPENAI_API_KEY,
   dangerouslyAllowBrowser: true
 });
+// Set up the PDF.js worker
+GlobalWorkerOptions.workerSrc = pdfjsWorker;
 
 const STAFF_PROMPT = `You are an AI health assistant designed to provide general educational support to medical professionals. Your role is to:
 - Offer evidence-based explanations of medical concepts, healthcare terminology, and standard clinical practices
@@ -101,7 +104,8 @@ async function findSimilarDocuments(query: string, orgId: string, limit: number 
 
 async function readPdfContent(file: File): Promise<string> {
   const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const loadingTask = getDocument(new Uint8Array(arrayBuffer));
+  const pdf = await loadingTask.promise;
   let fullText = '';
   
   for (let i = 1; i <= pdf.numPages; i++) {
