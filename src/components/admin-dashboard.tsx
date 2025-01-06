@@ -21,6 +21,11 @@ import { UserPlus, Upload, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { addDocument, removeDocument, listDocuments } from '../services/openai';
 
+// Generate a random password
+const generateRandomPassword = () => {
+  return Math.random().toString(36).slice(2, 10) + 'A1!';
+};
+
 interface UserProfile {
   uid: string;
   email: string;
@@ -49,11 +54,6 @@ interface Organization extends DocumentData {
     seats: number;
   };
 }
-
-// Generate a random password
-const generateRandomPassword = () => {
-  return Math.random().toString(36).slice(2, 10) + 'A1!';
-};
 
 export const AdminDashboard: React.FC = () => {
   const [organization, setOrganization] = useState<any>(null);
@@ -87,20 +87,19 @@ export const AdminDashboard: React.FC = () => {
 
         if (!orgSnapshot.empty) {
           const orgDoc = orgSnapshot.docs[0];
-          const orgData = orgDoc.data() as Organization;
-          const organization = { ...orgData, id: orgDoc.id };
-          setOrganization(organization);
+          const orgData = orgDoc.data();
+          setOrganization({ ...orgData, id: orgDoc.id });
 
           // Calculate available seats
-          const totalSeats = organization.subscription?.seats || 0;
-          const usedSeats = organization.members?.length || 0;
+          const totalSeats = orgData.subscription?.seats || 0;
+          const usedSeats = orgData.members?.length || 0;
           setAvailableSeats(totalSeats - usedSeats);
 
           // Get user profiles
-          if (organization.members && organization.members.length > 0) {
+          if (orgData.members && orgData.members.length > 0) {
             const userQuery = query(
               collection(firestore, 'User'),
-              where('email', 'in', organization.members)
+              where('email', 'in', orgData.members)
             );
             const userSnapshot = await getDocs(userQuery);
             const profiles = userSnapshot.docs.map(doc => ({
@@ -178,7 +177,6 @@ export const AdminDashboard: React.FC = () => {
       return true;
     } catch (err) {
       console.error('Error inviting member:', err);
-      setError(err instanceof Error ? err.message : 'Failed to invite member');
       throw err;
     } finally {
       setIsLoading(false);
