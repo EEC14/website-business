@@ -18,13 +18,12 @@ import {
   deleteObject
 } from 'firebase/storage';
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
-import * as pdfjsWorker from 'pdfjs-dist/build/pdf.worker';
+import 'pdfjs-dist/build/pdf.worker.entry';
 const openai = new OpenAI({
   apiKey: import.meta.env.VITE_OPENAI_API_KEY,
   dangerouslyAllowBrowser: true
 });
-// Set up the PDF.js worker
-GlobalWorkerOptions.workerSrc = pdfjsWorker;
+
 
 const STAFF_PROMPT = `You are an AI health assistant designed to provide general educational support to medical professionals. Your role is to:
 - Offer evidence-based explanations of medical concepts, healthcare terminology, and standard clinical practices
