@@ -110,7 +110,7 @@ export const AdminDashboard: React.FC = () => {
           }
 
           // Fetch context files
-          console.log("Getting context files:", files);
+          console.log("Getting context files");
           const files = await listDocuments(orgDoc.id);
           setContextFiles(files);
           console.log("Fetched context files:", files);
