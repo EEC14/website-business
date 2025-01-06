@@ -9,20 +9,17 @@ import {
   updateDoc,
   arrayUnion,
   setDoc,
-  getDoc
+  getDoc,
+  DocumentData
 } from 'firebase/firestore';
 import {
   getAuth,
   createUserWithEmailAndPassword,
   sendEmailVerification,
 } from 'firebase/auth';
-import { UserPlus } from 'lucide-react';
+import { UserPlus, Upload, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-
-// Generate a random password
-const generateRandomPassword = () => {
-  return Math.random().toString(36).slice(2, 10) + 'A1!';
-};
+import { addDocument, removeDocument, listDocuments } from '../services/openai';
 
 interface UserProfile {
   uid: string;
@@ -40,8 +37,26 @@ interface UserProfile {
   temporaryPassword?: string;
 }
 
+interface Organization extends DocumentData {
+  id: string;
+  name: string;
+  domain: string;
+  admins: string[];
+  members: string[];
+  subscription: {
+    plan: string;
+    status: string;
+    seats: number;
+  };
+}
+
+// Generate a random password
+const generateRandomPassword = () => {
+  return Math.random().toString(36).slice(2, 10) + 'A1!';
+};
+
 export const AdminDashboard: React.FC = () => {
-  const [organization, setOrganization] = useState<any>(null);
+  const [organization, setOrganization] = useState<Organization | null>(null);
   const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [selectedRole, setSelectedRole] = useState<'member' | 'admin'>('member');
@@ -49,6 +64,9 @@ export const AdminDashboard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [importedEmails, setImportedEmails] = useState<string[]>([]);
   const [availableSeats, setAvailableSeats] = useState(0);
+  const [contextFiles, setContextFiles] = useState<string[]>([]);
+  const [isUploadingContext, setIsUploadingContext] = useState(false);
+  const [contextError, setContextError] = useState<string | null>(null);
 
   const auth = getAuth();
   const firestore = getFirestore();
@@ -69,19 +87,20 @@ export const AdminDashboard: React.FC = () => {
 
         if (!orgSnapshot.empty) {
           const orgDoc = orgSnapshot.docs[0];
-          const orgData = orgDoc.data();
-          setOrganization({ ...orgData, id: orgDoc.id });
+          const orgData = orgDoc.data() as Organization;
+          const organization = { ...orgData, id: orgDoc.id };
+          setOrganization(organization);
 
           // Calculate available seats
-          const totalSeats = orgData.subscription?.seats || 0;
-          const usedSeats = orgData.members?.length || 0;
+          const totalSeats = organization.subscription?.seats || 0;
+          const usedSeats = organization.members?.length || 0;
           setAvailableSeats(totalSeats - usedSeats);
 
           // Get user profiles
-          if (orgData.members && orgData.members.length > 0) {
+          if (organization.members && organization.members.length > 0) {
             const userQuery = query(
               collection(firestore, 'User'),
-              where('email', 'in', orgData.members)
+              where('email', 'in', organization.members)
             );
             const userSnapshot = await getDocs(userQuery);
             const profiles = userSnapshot.docs.map(doc => ({
@@ -89,6 +108,10 @@ export const AdminDashboard: React.FC = () => {
             }));
             setUserProfiles(profiles);
           }
+
+          // Fetch context files
+          const files = await listDocuments(orgDoc.id);
+          setContextFiles(files);
         } else {
           throw new Error('Organization not found');
         }
@@ -105,6 +128,7 @@ export const AdminDashboard: React.FC = () => {
 
   const inviteMember = async (email: string) => {
     try {
+      if (!organization) throw new Error('No organization found');
       if (availableSeats <= 0) {
         throw new Error('No available seats. Please upgrade your subscription to add more users.');
       }
@@ -154,6 +178,7 @@ export const AdminDashboard: React.FC = () => {
       return true;
     } catch (err) {
       console.error('Error inviting member:', err);
+      setError(err instanceof Error ? err.message : 'Failed to invite member');
       throw err;
     } finally {
       setIsLoading(false);
@@ -176,6 +201,7 @@ export const AdminDashboard: React.FC = () => {
         .filter((cell: any) => 
           typeof cell === 'string' && 
           cell.includes('@') && 
+          organization?.domain && 
           cell.endsWith(`@${organization.domain}`)
         );
 
@@ -216,12 +242,51 @@ export const AdminDashboard: React.FC = () => {
     }
   };
 
+  const handleContextFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !organization) return;
+
+    setIsUploadingContext(true);
+    setContextError(null);
+
+    try {
+      await addDocument(file, organization.id);
+      const updatedFiles = await listDocuments(organization.id);
+      setContextFiles(updatedFiles);
+    } catch (err) {
+      console.error('Error uploading context file:', err);
+      setContextError('Failed to upload context file. Please try again.');
+    } finally {
+      setIsUploadingContext(false);
+    }
+  };
+
+  const handleRemoveContextFile = async (fileName: string) => {
+    if (!organization) return;
+
+    try {
+      await removeDocument(fileName, organization.id);
+      setContextFiles(prev => prev.filter(f => f !== fileName));
+    } catch (err) {
+      console.error('Error removing context file:', err);
+      setContextError('Failed to remove context file. Please try again.');
+    }
+  };
+
   if (isLoading) {
-    return <div className="p-4 text-center">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900"></div>
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="p-4 text-red-600">{error}</div>;
+    return (
+      <div className="p-4 bg-red-50 border border-red-400 text-red-700 rounded">
+        {error}
+      </div>
+    );
   }
 
   return (
@@ -296,6 +361,52 @@ export const AdminDashboard: React.FC = () => {
               >
                 {isLoading ? 'Processing...' : 'Import Users'}
               </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Context Files Management */}
+      <div className="bg-white p-4 rounded-lg shadow">
+        <h2 className="text-lg font-bold mb-4">AI Context Management</h2>
+        <div className="space-y-4">
+          <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+            <input
+              type="file"
+              accept=".txt,.md,.csv,.json"
+              onChange={handleContextFileUpload}
+              className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+            />
+            <p className="mt-2 text-xs text-gray-500">
+              Upload text files to enhance AI responses with custom context
+            </p>
+          </div>
+
+          {contextError && (
+            <div className="text-red-600 text-sm">{contextError}</div>
+          )}
+
+          {isUploadingContext && (
+            <div className="text-blue-600 text-sm">Uploading file...</div>
+          )}
+
+          {contextFiles.length > 0 && (
+            <div className="mt-4">
+              <h3 className="text-sm font-medium text-gray-700 mb-2">Uploaded Context Files</h3>
+              <ul className="divide-y divide-gray-200">
+                {contextFiles.map((fileName) => (
+                  <li key={fileName} className="py-3 flex justify-between items-center">
+                    <span className="text-sm text-gray-900">{fileName}</span>
+                    <button
+                      onClick={() => handleRemoveContextFile(fileName)}
+                      className="text-red-600 hover:text-red-800"
+                      title="Remove file"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
         </div>

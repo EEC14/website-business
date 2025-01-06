@@ -50,7 +50,7 @@ export default function App() {
 
     setIsLoading(true);
     try {
-      const response = await generateResponse(message, true);
+      const response = await generateResponse(message, true, user?.organizationId);
       setMessages((prev) => [
         ...prev,
         {

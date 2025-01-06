@@ -9,7 +9,7 @@ import {
 } from "firebase/auth";
 import { getFirestore, doc, getDoc, setDoc, collection } from "firebase/firestore";
 import { getAnalytics } from "firebase/analytics";
-
+import { getStorage } from 'firebase/storage';
 const firebaseConfig = {
   apiKey: "AIzaSyDl1CvwMfHDwn1aGT1WpSUN_oSzuyYyt-c",
   authDomain: "healthchat-a0113.firebaseapp.com",
@@ -27,6 +27,7 @@ const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const analytics = getAnalytics(app);
+export const storage = getStorage(app);
 export const createUser = async (email: string, password: string, accessCode: string) => {
   // Validate access code
   if (accessCode.toUpperCase().trim() !== CORRECT_ACCESS_CODE) {
