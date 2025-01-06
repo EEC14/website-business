@@ -56,7 +56,7 @@ const generateRandomPassword = () => {
 };
 
 export const AdminDashboard: React.FC = () => {
-  const [organization, setOrganization] = useState<Organization | null>(null);
+  const [organization, setOrganization] = useState<any>(null);
   const [userProfiles, setUserProfiles] = useState<UserProfile[]>([]);
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [selectedRole, setSelectedRole] = useState<'member' | 'admin'>('member');
