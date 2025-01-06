@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@headlessui/react": "^1.7.18",
+    "@langchain/core": "^0.3.27",
+    "@langchain/textsplitters": "^0.1.0",
     "@netlify/functions": "^2.8.2",
     "@tailwindcss/typography": "^0.5.10",
     "clsx": "^2.1.0",
