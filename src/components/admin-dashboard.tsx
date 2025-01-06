@@ -374,7 +374,7 @@ export const AdminDashboard: React.FC = () => {
           <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
             <input
               type="file"
-              accept=".txt,.md,.csv,.json"
+              accept=".txt,.md,.csv,.json, .pdf"
               onChange={handleContextFileUpload}
               className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
             />

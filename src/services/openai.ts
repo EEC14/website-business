@@ -17,7 +17,7 @@ import {
   getDownloadURL,
   deleteObject
 } from 'firebase/storage';
-
+import * as pdfjsLib from 'pdfjs-dist';
 const openai = new OpenAI({
   apiKey: import.meta.env.VITE_OPENAI_API_KEY,
   dangerouslyAllowBrowser: true
@@ -99,6 +99,23 @@ async function findSimilarDocuments(query: string, orgId: string, limit: number 
     .map(doc => doc.content);
 }
 
+async function readPdfContent(file: File): Promise<string> {
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let fullText = '';
+  
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const textContent = await page.getTextContent();
+    const pageText = textContent.items
+      .map((item: any) => item.str)
+      .join(' ');
+    fullText += pageText + '\n';
+  }
+  
+  return fullText;
+}
+
 // Function to process and add a document to Firebase
 export async function addDocument(file: File, orgId: string): Promise<void> {
   const storage = getStorage();
@@ -109,13 +126,18 @@ export async function addDocument(file: File, orgId: string): Promise<void> {
   await uploadBytes(storageRef, file);
   const downloadUrl = await getDownloadURL(storageRef);
 
-  // Read and process the file
-  const text = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => resolve(e.target?.result as string);
-    reader.onerror = (e) => reject(e);
-    reader.readAsText(file);
-  });
+  // Read file content based on type
+  let text: string;
+  if (file.type === 'application/pdf') {
+    text = await readPdfContent(file);
+  } else {
+    text = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target?.result as string);
+      reader.onerror = (e) => reject(e);
+      reader.readAsText(file);
+    });
+  }
 
   const splitter = new RecursiveCharacterTextSplitter({
     chunkSize: 1000,
