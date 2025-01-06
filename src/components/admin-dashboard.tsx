@@ -106,11 +106,13 @@ export const AdminDashboard: React.FC = () => {
               ...doc.data() as UserProfile
             }));
             setUserProfiles(profiles);
+            console.log("Getting user profiles:", profiles);
           }
 
           // Fetch context files
           const files = await listDocuments(orgDoc.id);
           setContextFiles(files);
+          console.log("Getting context files:", files);
         } else {
           throw new Error('Organization not found');
         }
