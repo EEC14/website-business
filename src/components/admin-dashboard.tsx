@@ -111,9 +111,9 @@ export const AdminDashboard: React.FC = () => {
 
           // Fetch context files
           console.log("Getting context files");
-          //const files = await listDocuments(orgDoc.id);
-          //setContextFiles(files);
-          //console.log("Fetched context files:", files);
+          const files = await listDocuments(orgDoc.id);
+          setContextFiles(files);
+          console.log("Fetched context files:", files);
         } else {
           throw new Error('Organization not found');
         }
