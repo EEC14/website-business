@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Loader2, Printer, Download, ArrowLeft, AlertTriangle, Dumbbell, Utensils, ArrowRight, User } from 'lucide-react';
 import { generatePlanQuestions, generatePlan } from "../services/carePlan";
-
+import FileUploader from './FileUploader';
 export type PlanType = 'workout' | 'diet';
 
 interface PatientData {
@@ -35,15 +35,40 @@ interface PatientFormProps {
 const PatientForm: React.FC<PatientFormProps> = ({ patientData, onPatientDataChange }) => {
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
+    const newValue = name === 'age' ? parseInt(value) || 0 : value;
     onPatientDataChange({
       ...patientData,
-      [name]: value
+      [name]: newValue
+    });
+  };
+
+  const handleFileData = (data: Partial<PatientData>) => {
+    onPatientDataChange({
+      ...patientData,
+      ...data,
+      age: typeof data.age === 'string' ? parseInt(data.age) : data.age || patientData.age
     });
   };
 
   return (
-    <div className="space-y-4 mb-6">
-      <h3 className="text-lg font-semibold text-gray-900">Patient Information</h3>
+    <div className="space-y-6">
+      <div className="flex items-center space-x-2 mb-4">
+        <User className="w-5 h-5 text-blue-600" />
+        <h3 className="text-lg font-semibold text-gray-900">Patient Information</h3>
+      </div>
+
+      <FileUploader onDataParsed={handleFileData} />
+      
+      <div className="relative py-3">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-gray-300" />
+        </div>
+        <div className="relative flex justify-center">
+          <span className="px-2 bg-white text-sm text-gray-500">
+            Or enter information manually
+          </span>
+        </div>
+      </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
