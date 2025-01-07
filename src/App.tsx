@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Stethoscope,
   User,
@@ -17,13 +17,15 @@ import { MedicalLearning } from "./components/MedicalLearning";
 import { AuthPage } from "./components/AuthPage";
 import { SubscriptionPage } from "./components/SubscriptionPage";
 import { AdminDashboard } from './components/admin-dashboard';
-import { generateResponse } from "./services/openai";
+import { generateResponse, getUserOrganizationId } from "./services/openai";
 import { useAuth } from "./hooks/useAuth";
 import { signOut } from "./services/firebase";
 import { clsx } from "clsx";
 import { hasFeatureAccess } from "./utils/hasFeatureAccess";
 import { AccessDeniedPopup } from "./components/AccessDeniedPopup";
-
+import { collection } from "firebase/firestore";
+import { firestore } from "firebase-admin";
+import { getAuth } from "firebase/auth";
 type Message = {
   text: string;
   isBot: boolean;
@@ -37,6 +39,15 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPopup, setShowPopup] = useState(false);
   const [selectedTab, setSelectedTab] = useState(0);
+  const [orgId, setOrgId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const auth = getAuth();
+    if (auth.currentUser) {
+      getUserOrganizationId(auth.currentUser.uid)
+        .then(id => setOrgId(id));
+    }
+  }, []);
 
   const handleSendMessage = async (message: string) => {
     setMessages((prev) => [
@@ -50,7 +61,7 @@ export default function App() {
 
     setIsLoading(true);
     try {
-      const response = await generateResponse(message, true, user?.organizationId);
+      const response = await generateResponse(message, true, usersorg);
       setMessages((prev) => [
         ...prev,
         {

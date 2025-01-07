@@ -60,6 +60,21 @@ interface OpenAIResponse {
   requiresDoctor: boolean;
 }
 
+//Get the user's orgId
+export async function getUserOrganizationId(userId: string): Promise<string | null> {
+  const firestore = getFirestore();
+  try {
+    const userDoc = await getDoc(doc(firestore, 'User', userId));
+    if (userDoc.exists()) {
+      return userDoc.data().organizationId;
+    }
+    return null;
+  } catch (error) {
+    console.error('Error getting user organization:', error);
+    return null;
+  }
+}
+
 // Function to calculate cosine similarity between two vectors
 function cosineSimilarity(vec1: number[], vec2: number[]): number {
   const dotProduct = vec1.reduce((sum, val, i) => sum + val * vec2[i], 0);
