@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Stethoscope } from "lucide-react";
+import { Stethoscope, LogOut } from "lucide-react";
 import { Plans } from "../utils/Plans";
-
+import { signOut } from "../services/firebase";
 interface SubscriptionPageProps {
   userEmail: string;
 }
@@ -16,6 +16,7 @@ export const SubscriptionPage = ({ userEmail }: SubscriptionPageProps) => {
     }), {});
   });
 
+
   const updateSeats = (priceId: string, seats: number) => {
     setSeatsByPlan(prev => ({
       ...prev,
@@ -29,6 +30,15 @@ export const SubscriptionPage = ({ userEmail }: SubscriptionPageProps) => {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-b from-blue-50 to-white">
+      <div className="absolute top-4 right-4">
+        <button
+          onClick={() => signOut()}
+          className="text-gray-600 hover:text-gray-900 transition-colors"
+          title="Sign Out"
+        >
+          <LogOut className="w-5 h-5" />
+        </button>
+      </div>
       <div className="w-full max-w-5xl space-y-8">
         <div className="text-center">
           <div className="flex items-center justify-center gap-2 mb-6">
