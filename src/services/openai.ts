@@ -297,11 +297,25 @@ export async function generateResponse(
     
     if (functionCall?.name === "formatMedicalResponse") {
       try {
-        // Clean the arguments string and parse it
-        const args = functionCall.arguments?.trim() || "{}";
-        const { content } = JSON.parse(args);
+        let args = functionCall.arguments || "{}";
         
-        return { content: content || "I apologize, but I couldn't generate a response." };
+        // Handle potential invalid JSON characters
+        args = args.replace(/\n/g, '\\n')  // Replace newlines with escaped newlines
+                   .replace(/\r/g, '\\r')   // Replace carriage returns
+                   .replace(/\t/g, '\\t')   // Replace tabs
+                   .replace(/\f/g, '\\f')   // Replace form feeds
+                   .replace(/[\u0000-\u0019]+/g, ''); // Remove control characters
+        
+        const parsedArgs = JSON.parse(args);
+        
+        if (typeof parsedArgs.content !== 'string') {
+          throw new Error('Content is not a string');
+        }
+
+        // Restore newlines in the content after parsing
+        const content = parsedArgs.content.replace(/\\n/g, '\n');
+        
+        return { content };
       } catch (parseError) {
         console.error('Error parsing function call arguments:', parseError);
         console.log('Raw arguments:', functionCall.arguments);
