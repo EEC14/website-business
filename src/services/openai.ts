@@ -273,61 +273,13 @@ export async function generateResponse(
           content: message 
         }
       ],
-      functions: [
-        {
-          name: "formatMedicalResponse",
-          parameters: {
-            type: "object",
-            properties: {
-              content: {
-                type: "string",
-                description: "The medical response content"
-              }
-            },
-            required: ["content"]
-          }
-        }
-      ],
-      function_call: { name: "formatMedicalResponse" },
       temperature: isStaff ? 0.5 : 0.7,
       max_tokens: 800
     });
 
-    const functionCall = response.choices[0]?.message?.function_call;
-    
-    if (functionCall?.name === "formatMedicalResponse") {
-      try {
-        let args = functionCall.arguments || "{}";
-        
-        // Handle potential invalid JSON characters
-        args = args.replace(/\n/g, '\\n')  // Replace newlines with escaped newlines
-                   .replace(/\r/g, '\\r')   // Replace carriage returns
-                   .replace(/\t/g, '\\t')   // Replace tabs
-                   .replace(/\f/g, '\\f')   // Replace form feeds
-                   .replace(/[\u0000-\u0019]+/g, ''); // Remove control characters
-        
-        const parsedArgs = JSON.parse(args);
-        
-        if (typeof parsedArgs.content !== 'string') {
-          throw new Error('Content is not a string');
-        }
+    const content = response.choices[0]?.message?.content || "I apologize, but I couldn't generate a response.";
+    return { content };
 
-        // Restore newlines in the content after parsing
-        const content = parsedArgs.content.replace(/\\n/g, '\n');
-        
-        return { content };
-      } catch (parseError) {
-        console.error('Error parsing function call arguments:', parseError);
-        console.log('Raw arguments:', functionCall.arguments);
-        return {
-          content: "I apologize, but I encountered an error processing the response."
-        };
-      }
-    }
-
-    return {
-      content: "I apologize, but I couldn't generate a response. Please try again."
-    };
   } catch (error) {
     console.error('Error generating response:', error);
     return {
