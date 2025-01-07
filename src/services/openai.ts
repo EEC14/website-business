@@ -57,7 +57,6 @@ interface DocumentChunk {
 
 interface OpenAIResponse {
   content: string;
-  requiresDoctor: boolean;
 }
 
 //Get the user's orgId
@@ -286,12 +285,8 @@ export async function generateResponse(
                 type: "string",
                 description: "The medical response content"
               },
-              requiresDoctor: {
-                type: "boolean",
-                description: "Indicates if immediate medical attention is needed"
-              }
             },
-            required: ["content", "requiresDoctor"]
+            required: ["content"]
           }
         }
       ],
@@ -302,27 +297,24 @@ export async function generateResponse(
 
     const functionCall = response.choices[0]?.message?.function_call;
     if (functionCall?.name === "formatMedicalResponse") {
-      const { content, requiresDoctor } = JSON.parse(functionCall.arguments || "{}");
+      const { content } = JSON.parse(functionCall.arguments || "{}");
       
       if (isStaff) {
         return {
           content: formatStaffResponse(content),
-          requiresDoctor
         };
       }
       
-      return { content, requiresDoctor };
+      return { content };
     }
 
     return {
       content: "I apologize, but I couldn't generate a response. Please try again.",
-      requiresDoctor: false
     };
   } catch (error) {
     console.error('Error generating response:', error);
     return {
       content: "I apologize, but I'm having trouble connecting to my knowledge base. Please try again later.",
-      requiresDoctor: false
     };
   }
 }
