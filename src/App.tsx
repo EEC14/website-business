@@ -61,7 +61,7 @@ export default function App() {
 
     setIsLoading(true);
     try {
-      const response = await generateResponse(message, true, usersorg);
+      const response = await generateResponse(message, true, orgId);
       setMessages((prev) => [
         ...prev,
         {
