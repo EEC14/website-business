@@ -252,15 +252,13 @@ export async function generateResponse(
   message: string, 
   isStaff: boolean, 
   orgId: string
-): Promise<OpenAIResponse> {
+): Promise<{ content: string }> {
   try {
-    // Retrieve relevant context from document store
     const relevantDocs = await findSimilarDocuments(message, orgId);
     const context = relevantDocs.length > 0 
       ? `\n\nRelevant context from documentation:\n${relevantDocs.join('\n\n')}`
       : '';
     
-    // Enhance the existing prompts with context
     const contextualPrompt = `${isStaff ? STAFF_PROMPT : PATIENT_PROMPT}${context}`;
     
     const response = await openai.chat.completions.create({
@@ -284,7 +282,7 @@ export async function generateResponse(
               content: {
                 type: "string",
                 description: "The medical response content"
-              },
+              }
             },
             required: ["content"]
           }
@@ -296,25 +294,30 @@ export async function generateResponse(
     });
 
     const functionCall = response.choices[0]?.message?.function_call;
+    
     if (functionCall?.name === "formatMedicalResponse") {
-      const { content } = JSON.parse(functionCall.arguments || "{}");
-      
-      if (isStaff) {
+      try {
+        // Clean the arguments string and parse it
+        const args = functionCall.arguments?.trim() || "{}";
+        const { content } = JSON.parse(args);
+        
+        return { content: content || "I apologize, but I couldn't generate a response." };
+      } catch (parseError) {
+        console.error('Error parsing function call arguments:', parseError);
+        console.log('Raw arguments:', functionCall.arguments);
         return {
-          content: formatStaffResponse(content),
+          content: "I apologize, but I encountered an error processing the response."
         };
       }
-      
-      return { content };
     }
 
     return {
-      content: "I apologize, but I couldn't generate a response. Please try again.",
+      content: "I apologize, but I couldn't generate a response. Please try again."
     };
   } catch (error) {
     console.error('Error generating response:', error);
     return {
-      content: "I apologize, but I'm having trouble connecting to my knowledge base. Please try again later.",
+      content: "I apologize, but I'm having trouble connecting to my knowledge base. Please try again later."
     };
   }
 }

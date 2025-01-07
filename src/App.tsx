@@ -66,8 +66,7 @@ export default function App() {
         ...prev,
         {
           text: response.content,
-          isBot: true,
-          isUrgent: response.requiresDoctor,
+          isBot: true
         },
       ]);
     } catch (error) {
