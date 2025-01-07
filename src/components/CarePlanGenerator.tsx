@@ -1,17 +1,170 @@
 import React, { useState } from "react";
-import { Loader2, Printer, Download, ArrowLeft, AlertTriangle, Dumbbell, Utensils, ArrowRight } from 'lucide-react';
+import { Loader2, Printer, Download, ArrowLeft, AlertTriangle, Dumbbell, Utensils, ArrowRight, User } from 'lucide-react';
 import { generatePlanQuestions, generatePlan } from "../services/carePlan";
 
 export type PlanType = 'workout' | 'diet';
 
+interface PatientData {
+  id?: string;
+  name: string;
+  age: number;
+  height: string;
+  weight: string;
+  medicalConditions: string;
+  medications: string;
+  allergies: string;
+  previousTreatments: string;
+}
+
+const initialPatientData: PatientData = {
+  name: '',
+  age: 0,
+  height: '',
+  weight: '',
+  medicalConditions: '',
+  medications: '',
+  allergies: '',
+  previousTreatments: ''
+};
+
+interface PatientFormProps {
+  patientData: PatientData;
+  onPatientDataChange: (data: PatientData) => void;
+}
+
+const PatientForm: React.FC<PatientFormProps> = ({ patientData, onPatientDataChange }) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    onPatientDataChange({
+      ...patientData,
+      [name]: value
+    });
+  };
+
+  return (
+    <div className="space-y-4 mb-6">
+      <h3 className="text-lg font-semibold text-gray-900">Patient Information</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+            Patient Name
+          </label>
+          <input
+            type="text"
+            id="name"
+            name="name"
+            value={patientData.name}
+            onChange={handleChange}
+            className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+        <div>
+          <label htmlFor="age" className="block text-sm font-medium text-gray-700 mb-1">
+            Age
+          </label>
+          <input
+            type="number"
+            id="age"
+            name="age"
+            value={patientData.age}
+            onChange={handleChange}
+            className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+        <div>
+          <label htmlFor="height" className="block text-sm font-medium text-gray-700 mb-1">
+            Height
+          </label>
+          <input
+            type="text"
+            id="height"
+            name="height"
+            value={patientData.height}
+            onChange={handleChange}
+            placeholder="e.g., 5'10''"
+            className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+        <div>
+          <label htmlFor="weight" className="block text-sm font-medium text-gray-700 mb-1">
+            Weight
+          </label>
+          <input
+            type="text"
+            id="weight"
+            name="weight"
+            value={patientData.weight}
+            onChange={handleChange}
+            placeholder="e.g., 160 lbs"
+            className="w-full px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+      </div>
+      <div className="space-y-4">
+        <div>
+          <label htmlFor="medicalConditions" className="block text-sm font-medium text-gray-700 mb-1">
+            Medical Conditions
+          </label>
+          <textarea
+            id="medicalConditions"
+            name="medicalConditions"
+            value={patientData.medicalConditions}
+            onChange={handleChange}
+            className="w-full h-24 px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+        <div>
+          <label htmlFor="medications" className="block text-sm font-medium text-gray-700 mb-1">
+            Current Medications
+          </label>
+          <textarea
+            id="medications"
+            name="medications"
+            value={patientData.medications}
+            onChange={handleChange}
+            className="w-full h-24 px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+        <div>
+          <label htmlFor="allergies" className="block text-sm font-medium text-gray-700 mb-1">
+            Allergies
+          </label>
+          <textarea
+            id="allergies"
+            name="allergies"
+            value={patientData.allergies}
+            onChange={handleChange}
+            className="w-full h-24 px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+        <div>
+          <label htmlFor="previousTreatments" className="block text-sm font-medium text-gray-700 mb-1">
+            Previous Treatments
+          </label>
+          <textarea
+            id="previousTreatments"
+            name="previousTreatments"
+            value={patientData.previousTreatments}
+            onChange={handleChange}
+            className="w-full h-24 px-4 py-2 rounded-lg border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+
 interface PlanQuestionnaireProps {
   type: PlanType;
   onPlanGenerated: (plan: string) => void;
+  patientData: PatientData;
 }
 
 export const PlanQuestionnaire: React.FC<PlanQuestionnaireProps> = ({
   type,
   onPlanGenerated,
+  patientData,
 }) => {
   const [questions, setQuestions] = useState<string[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -24,7 +177,7 @@ export const PlanQuestionnaire: React.FC<PlanQuestionnaireProps> = ({
 
     setIsLoading(true);
     try {
-      const generatedQuestions = await generatePlanQuestions(type, goals);
+      const generatedQuestions = await generatePlanQuestions(type, goals, patientData);
       setQuestions(generatedQuestions);
     } catch (error) {
       console.error('Error:', error);
@@ -40,7 +193,7 @@ export const PlanQuestionnaire: React.FC<PlanQuestionnaireProps> = ({
 
     setIsLoading(true);
     try {
-      const plan = await generatePlan(type, goals, answers);
+      const plan = await generatePlan(type, goals, answers, patientData);
       onPlanGenerated(plan);
     } catch (error) {
       console.error('Error:', error);
@@ -185,10 +338,9 @@ const PlanResult: React.FC<PlanResultProps> = ({ plan, type, onReset }) => {
 
 export const CarePlanGenerator: React.FC = () => {
   const [planType, setPlanType] = useState<PlanType | null>(null);
-  const [step, setStep] = useState<"select" | "questionnaire" | "plan">(
-    "select"
-  );
+  const [step, setStep] = useState<"select" | "patient" | "questionnaire" | "plan">("select");
   const [generatedPlan, setGeneratedPlan] = useState<string>("");
+  const [patientData, setPatientData] = useState<PatientData>(initialPatientData);
 
   const handlePlanGenerated = (plan: string) => {
     setGeneratedPlan(plan);
@@ -198,6 +350,7 @@ export const CarePlanGenerator: React.FC = () => {
   const resetPlan = () => {
     setPlanType(null);
     setGeneratedPlan("");
+    setPatientData(initialPatientData);
     setStep("select");
   };
 
@@ -206,7 +359,7 @@ export const CarePlanGenerator: React.FC = () => {
       <div className="overflow-hidden bg-white border border-gray-200 shadow-lg rounded-2xl">
         <div className="p-6">
           <h1 className="mb-4 text-2xl font-bold text-gray-900">
-            Personalized Plan Generator
+            Medical Staff Care Plan Generator
           </h1>
 
           {step === "select" && (
@@ -215,7 +368,7 @@ export const CarePlanGenerator: React.FC = () => {
                 <button
                   onClick={() => {
                     setPlanType("workout");
-                    setStep("questionnaire");
+                    setStep("patient");
                   }}
                   className="flex items-center p-6 transition-colors duration-200 border-2 border-gray-200 rounded-xl hover:border-blue-500 group"
                 >
@@ -236,7 +389,7 @@ export const CarePlanGenerator: React.FC = () => {
                 <button
                   onClick={() => {
                     setPlanType("diet");
-                    setStep("questionnaire");
+                    setStep("patient");
                   }}
                   className="flex items-center p-6 transition-colors duration-200 border-2 border-gray-200 rounded-xl hover:border-blue-500 group"
                 >
@@ -255,10 +408,28 @@ export const CarePlanGenerator: React.FC = () => {
             </div>
           )}
 
+          {step === "patient" && (
+            <div className="space-y-6">
+              <PatientForm
+                patientData={patientData}
+                onPatientDataChange={setPatientData}
+              />
+              <button
+                onClick={() => setStep("questionnaire")}
+                disabled={!patientData.name || !patientData.age}
+                className="w-full bg-blue-900 text-white py-3 px-6 rounded-xl hover:bg-blue-800 
+                         transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Continue to Plan Questions
+              </button>
+            </div>
+          )}
+
           {step === "questionnaire" && planType && (
             <PlanQuestionnaire
               type={planType}
               onPlanGenerated={handlePlanGenerated}
+              patientData={patientData}
             />
           )}
 
@@ -275,9 +446,7 @@ export const CarePlanGenerator: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <AlertTriangle className="w-5 h-5 text-yellow-600" />
                 <p className="text-sm text-yellow-700">
-                  This plan is for informational purposes only. Consult with
-                  healthcare professionals before starting any new workout or
-                  diet program.
+                  This plan is for informational purposes only and should be reviewed by appropriate medical professionals before implementation.
                 </p>
               </div>
             </div>
