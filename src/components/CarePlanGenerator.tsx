@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Loader2, Printer, Download, ArrowLeft, AlertTriangle, Dumbbell, Utensils, ArrowRight, User } from 'lucide-react';
 import { generatePlanQuestions, generatePlan } from "../services/carePlan";
-import FileUploader from './FileUploader';
+import FileUploader from './fileUploades';
 export type PlanType = 'workout' | 'diet';
 
 interface PatientData {
