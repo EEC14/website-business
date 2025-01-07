@@ -5,7 +5,7 @@ import {
   collection,
   addDoc,
   getDocs,
-  query,
+  query as firestoreQuery,
   where,
   deleteDoc,
   doc
@@ -78,27 +78,35 @@ async function getEmbedding(text: string): Promise<number[]> {
 }
 
 // Function to find similar documents
-async function findSimilarDocuments(query: string, orgId: string, limit: number = 3): Promise<string[]> {
+async function findSimilarDocuments(userQuery: string, orgId: string, limit: number = 3): Promise<string[]> {
   const firestore = getFirestore();
   const chunksCollection = collection(firestore, 'documentChunks');
-  const chunksQuery = query(chunksCollection, where('orgId', '==', orgId));
-  const chunks = await getDocs(chunksQuery);
   
-  if (chunks.empty) {
+  // Use firestoreQuery instead of query
+  const chunksQuery = firestoreQuery(chunksCollection, where('orgId', '==', orgId));
+  
+  try {
+    const chunks = await getDocs(chunksQuery);
+    
+    if (chunks.empty) {
+      return [];
+    }
+
+    const queryEmbedding = await getEmbedding(userQuery);
+    
+    const similarities = chunks.docs.map(doc => ({
+      content: doc.data().content,
+      similarity: cosineSimilarity(queryEmbedding, doc.data().embedding)
+    }));
+    
+    return similarities
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, limit)
+      .map(doc => doc.content);
+  } catch (error) {
+    console.error('Error querying documents:', error);
     return [];
   }
-
-  const queryEmbedding = await getEmbedding(query);
-  
-  const similarities = chunks.docs.map(doc => ({
-    content: doc.data().content,
-    similarity: cosineSimilarity(queryEmbedding, doc.data().embedding)
-  }));
-  
-  return similarities
-    .sort((a, b) => b.similarity - a.similarity)
-    .slice(0, limit)
-    .map(doc => doc.content);
 }
 
 async function readPdfContent(file: File): Promise<string> {
@@ -175,7 +183,7 @@ export async function removeDocument(fileName: string, orgId: string): Promise<v
 
   // Delete chunks from Firestore
   const chunksCollection = collection(firestore, 'documentChunks');
-  const chunksQuery = query(
+  const chunksQuery = firestoreQuery(
     chunksCollection, 
     where('orgId', '==', orgId),
     where('fileName', '==', fileName)
@@ -190,7 +198,7 @@ export async function removeDocument(fileName: string, orgId: string): Promise<v
 export async function listDocuments(orgId: string): Promise<string[]> {
   const firestore = getFirestore();
   const chunksCollection = collection(firestore, 'documentChunks');
-  const docsQuery = query(chunksCollection, where('orgId', '==', orgId));
+  const docsQuery = firestoreQuery(chunksCollection, where('orgId', '==', orgId));
   const chunks = await getDocs(docsQuery);
   
   // Get unique file names
