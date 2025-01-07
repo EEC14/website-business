@@ -191,21 +191,26 @@ export async function removeDocument(fileName: string, orgId: string): Promise<v
   const storage = getStorage();
   const firestore = getFirestore();
   
-  // Delete file from Storage
-  const storageRef = ref(storage, `documents/${orgId}/${fileName}`);
-  await deleteObject(storageRef);
+  try {
+    // Delete file from Storage
+    const storageRef = ref(storage, `documents/${orgId}/${fileName}`);
+    await deleteObject(storageRef);
 
-  // Delete chunks from Firestore
-  const chunksCollection = collection(firestore, 'documentChunks');
-  const chunksQuery = firestoreQuery(
-    chunksCollection, 
-    where('orgId', '==', orgId),
-    where('fileName', '==', fileName)
-  );
-  
-  const chunks = await getDocs(chunksQuery);
-  const deletePromises = chunks.docs.map(doc => deleteDoc(doc.ref));
-  await Promise.all(deletePromises);
+    // Delete chunks from Firestore
+    const chunksCollection = collection(firestore, 'documentChunks');
+    const chunksQuery = firestoreQuery(
+      chunksCollection, 
+      where('orgId', '==', orgId),
+      where('fileName', '==', fileName)
+    );
+    
+    const chunks = await getDocs(chunksQuery);
+    const deletePromises = chunks.docs.map(doc => deleteDoc(doc.ref));
+    await Promise.all(deletePromises);
+  } catch (error) {
+    console.error('Error removing document:', error);
+    throw error; // Re-throw to handle in the component
+  }
 }
 
 // Function to list all documents for an organization

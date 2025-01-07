@@ -264,13 +264,22 @@ export const AdminDashboard: React.FC = () => {
 
   const handleRemoveContextFile = async (fileName: string) => {
     if (!organization) return;
-
+  
     try {
+      setContextError(null);
+      // Show some loading state
+      setIsUploadingContext(true); 
+  
       await removeDocument(fileName, organization.id);
-      setContextFiles(prev => prev.filter(f => f !== fileName));
+      
+      // After successful deletion, fetch the updated list of documents
+      const updatedFiles = await listDocuments(organization.id);
+      setContextFiles(updatedFiles);
     } catch (err) {
       console.error('Error removing context file:', err);
       setContextError('Failed to remove context file. Please try again.');
+    } finally {
+      setIsUploadingContext(false);
     }
   };
 
